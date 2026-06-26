@@ -16,6 +16,10 @@ dependencies = [
     "faker==30.8.2",
     # Postgres driver used by the seed loader and (in later splits) the server.
     "psycopg[binary]==3.2.3",
+    # SQL parser for the Layer-1 guard (whole-AST walk, dialect=postgres). Pinned because
+    # parser behaviour (node classes, Command fallbacks) can drift between versions and the
+    # guard's security decisions depend on it.
+    "sqlglot==25.34.0",
     # YAML parser for the optional redact.yaml column-redaction config (spec §8).
     "pyyaml==6.0.3",
 ]
