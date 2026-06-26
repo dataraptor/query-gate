@@ -1,23 +1,39 @@
-"""Result filter — **serializer portion only** (spec §7).
+"""Result filter (spec §4, §6, §8) — *the model proposes the query; code disposes of the result.*
 
-Every Postgres cell must become a JSON-safe scalar (``str | int | float | bool | None``)
-or a JSON-safe container of them before it can reach the agent. An unhandled type is the
-kind of bug that 500s a demo, so the rule is strict: every type the demo schema can produce
-is mapped explicitly, and **anything unmapped raises a typed error** (caught upstream and
-turned into ``status: error``, spec §18) — we never silently ``str()`` an unknown object.
+Three deterministic steps run on **every** row set before it leaves the process, so the agent's
+context can never be flooded or poisoned by a result:
 
-Scope note: this file holds ONLY the type serializer. The auto-``LIMIT`` enforcement, the
-byte cap, and redaction (the rest of the "result filter") arrive in Split 5.
+1. **Serialize** every Postgres cell to a JSON-safe scalar (``str | int | float | bool | None``)
+   or a JSON-safe container of them. An unhandled type is the kind of bug that 500s a demo, so the
+   rule is strict: every type the demo schema can produce is mapped explicitly, and **anything
+   unmapped raises a typed error** (caught upstream → ``status: error``, spec §18) — we never
+   silently ``str()`` an unknown object.
+2. **Redact** configured ``table.column`` cells to ``"***"`` (the PHI mechanism, spec §8). Default
+   **off**. Redaction hides a column from the *result*, not from ``WHERE``/aggregates (a
+   ``count(*)`` over a redacted column still works) — a feature boundary, not a bug (spec §18).
+3. **Byte-cap** the serialized payload (default 256 KB, spec §6): cut any single oversized cell
+   and drop trailing rows until the payload fits — never stream a megabyte cell or 100k rows.
+
+The row ``LIMIT``/``truncated`` (the guard, Split 3) and the byte cap/``truncated_bytes`` are
+**independent** signals; both can fire. ``LIMIT`` caps rows *returned*, not work *done* — the
+``statement_timeout`` (Layer 2) and this byte cap bound runtime/context (spec §5 ⚠).
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import json
 from decimal import Decimal
 from typing import Any, Sequence
 
 #: A JSON-safe scalar leaf. (Containers of these are also JSON-safe.)
 JSONScalar = str | int | float | bool | None
+
+#: The placeholder a redacted cell is replaced with (spec §8).
+REDACTION_MASK = "***"
+
+#: Appended to a cell cut by the byte cap so the truncation is honest, not silent.
+_CUT_MARKER = "…[truncated]"
 
 
 class SerializationError(TypeError):
@@ -103,3 +119,115 @@ def serialize_rows(
             serialized.append(to_json_scalar(cell, decimal_as_str=as_str))
         out.append(serialized)
     return out
+
+
+# ==================================================================================================
+# Redaction (spec §8) — mask configured columns in the RESULT only.
+# ==================================================================================================
+
+
+def columns_to_redact(
+    columns: Sequence[str],
+    redact_set: set[str] | frozenset[str],
+    *,
+    table: str | None = None,
+) -> list[str]:
+    """Decide which **output column names** to mask, given the ``{table.column}`` redact set.
+
+    Two matching modes (spec §8 R2):
+
+    * **Precise** (``table`` known — ``describe_table`` / ``search_text``): mask column ``c`` only
+      when ``f"{table}.{c}"`` is configured.
+    * **By column name** (``table is None`` — ``run_select``, whose projected columns can't be
+      reliably mapped back to a base table in v1): mask column ``c`` when **any** configured entry
+      names that column (``*.c``). This is the documented v1 simplification — it can over-mask a
+      same-named column from a non-configured table, which is the safe direction for a PHI control.
+    """
+    if not redact_set:
+        return []
+    masked: list[str] = []
+    for c in columns:
+        if table is not None:
+            if f"{table}.{c}" in redact_set:
+                masked.append(c)
+        elif any(entry.rsplit(".", 1)[-1] == c for entry in redact_set):
+            masked.append(c)
+    return masked
+
+
+def apply_redaction(
+    rows: list[list[Any]], columns: Sequence[str], masked_columns: Sequence[str]
+) -> list[list[Any]]:
+    """Replace every cell in ``masked_columns`` with :data:`REDACTION_MASK` (a new row list)."""
+    mask_idx = {i for i, c in enumerate(columns) if c in set(masked_columns)}
+    if not mask_idx:
+        return rows
+    return [
+        [REDACTION_MASK if i in mask_idx else cell for i, cell in enumerate(row)] for row in rows
+    ]
+
+
+# ==================================================================================================
+# Byte cap (spec §6, §18) — bound the serialized payload size.
+# ==================================================================================================
+
+
+def _compact_bytes(value: Any) -> int:
+    """Serialized size of a JSON-safe value, in UTF-8 bytes (compact separators)."""
+    return len(json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+
+def _cut_cell(cell: Any, budget_bytes: int) -> Any:
+    """Cut one oversized cell down to ``budget_bytes`` (+ a visible marker), honestly.
+
+    A non-string cell (``jsonb``/array → dict/list) is rendered to its JSON text first so the cut
+    value is still a JSON-safe scalar the agent can read; the original structure is intentionally
+    not preserved — the point is to not ship a megabyte cell whole.
+    """
+    text = cell if isinstance(cell, str) else json.dumps(cell, separators=(",", ":"))
+    cut = text.encode("utf-8")[: max(budget_bytes, 0)].decode("utf-8", "ignore")
+    return cut + _CUT_MARKER
+
+
+def apply_byte_cap(rows: list[list[Any]], byte_cap: int) -> tuple[list[list[Any]], bool]:
+    """Bound the serialized row payload to ``byte_cap`` bytes; return ``(rows, truncated_bytes)``.
+
+    Two passes (spec §6, §18):
+
+    1. **Oversized cell** — any single cell whose serialized form alone exceeds ``byte_cap`` is cut
+       to **half** the cap (so the row containing it can still fit under the cap and be returned,
+       rather than dropped whole). Sets ``truncated_bytes``.
+    2. **Row-wise** — if the whole payload still exceeds ``byte_cap``, drop trailing rows until it
+       fits. Sets ``truncated_bytes``.
+
+    The returned rows always serialize to ``<= byte_cap`` bytes (the post-condition the tests assert).
+    """
+    if byte_cap <= 0 or not rows:
+        return rows, False
+
+    truncated_bytes = False
+    cell_budget = byte_cap // 2
+
+    # Pass 1 — cut oversized individual cells so no single cell can blow the budget.
+    capped: list[list[Any]] = []
+    for row in rows:
+        new_row = list(row)
+        for i, cell in enumerate(new_row):
+            if _compact_bytes(cell) > byte_cap:
+                new_row[i] = _cut_cell(cell, cell_budget)
+                truncated_bytes = True
+        capped.append(new_row)
+
+    # Pass 2 — row-wise truncation if the payload still exceeds the cap.
+    if _compact_bytes(capped) <= byte_cap:
+        return capped, truncated_bytes
+
+    kept: list[list[Any]] = []
+    running = 2  # the enclosing "[]"
+    for row in capped:
+        row_bytes = _compact_bytes(row) + 1  # +1 for the separating comma
+        if running + row_bytes > byte_cap:
+            break
+        kept.append(row)
+        running += row_bytes
+    return kept, True

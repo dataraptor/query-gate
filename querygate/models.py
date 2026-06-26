@@ -18,7 +18,14 @@ from pydantic import BaseModel, Field
 
 from .result import JSONScalar
 
-__all__ = ["JSONScalar", "RunResult", "AuditLine"]
+__all__ = [
+    "JSONScalar",
+    "RunResult",
+    "AuditLine",
+    "TableInfo",
+    "ColumnInfo",
+    "TableSchema",
+]
 
 
 class RunResult(BaseModel):
@@ -38,10 +45,43 @@ class RunResult(BaseModel):
     sql: str
     #: ``True`` if the row LIMIT was hit (see ``run_select`` for the conservative signal).
     truncated: bool
-    #: ``True`` if the byte cap forced an early cut. Set by the Split-5 filter; ``False`` here.
+    #: ``True`` if the byte cap forced an early cut (oversized cell and/or trailing rows dropped).
     truncated_bytes: bool = False
+    #: Columns masked by redaction in this result, if any (spec §8); ``[]`` when redaction is off.
+    redactions: list[str] = Field(default_factory=list)
     #: Wall-clock of the DB execution + serialization, in milliseconds.
     elapsed_ms: int
+
+
+class TableInfo(BaseModel):
+    """One entry returned by ``list_tables`` (spec §6): a table name + a row-count estimate.
+
+    ``est_rows`` is the planner's estimate from ``pg_class.reltuples`` (populated by the Split-01
+    ``ANALYZE``) — approximate by design, not an exact ``count(*)``.
+    """
+
+    table: str
+    est_rows: int
+
+
+class ColumnInfo(BaseModel):
+    """One column in a :class:`TableSchema` (spec §7)."""
+
+    name: str
+    type: str
+    nullable: bool
+    is_pk: bool = False
+    #: FK target as ``"<table>.<column>"`` (e.g. ``"providers.provider_id"``); ``None`` if not a FK.
+    references: str | None = None
+
+
+class TableSchema(BaseModel):
+    """The shape ``describe_table`` returns (spec §7): columns + a few post-redaction sample rows."""
+
+    table: str
+    columns: list[ColumnInfo]
+    #: A few real rows, serialized and redaction-applied — grounding context for the agent.
+    sample_rows: list[list[JSONScalar]]
 
 
 class AuditLine(BaseModel):
