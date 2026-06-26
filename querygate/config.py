@@ -22,6 +22,7 @@ from pathlib import Path
 DEFAULT_ROW_LIMIT = 1000
 DEFAULT_BYTE_CAP = 256 * 1024  # 256 KB, measured on the serialized payload
 DEFAULT_STATEMENT_TIMEOUT = "5s"
+DEFAULT_AUDIT_PATH = "audit.jsonl"  # one JSONL line per tool call (spec §9)
 
 _TRUTHY = {"1", "true", "yes", "on"}
 
@@ -68,6 +69,9 @@ class Config:
     #: Path to ``redact.yaml``; ``None`` => redaction off (the default, spec §8).
     redact_path: str | None = None
 
+    #: Path to the JSONL audit log; one line per tool call is appended here (spec §9).
+    audit_path: str = DEFAULT_AUDIT_PATH
+
     #: Optional ``work_mem`` ceiling note for the role (spec §5). Set on the role in
     #: ``init_role.sql``; carried here for visibility/documentation, not applied per call.
     work_mem: str | None = None
@@ -89,6 +93,8 @@ class Config:
                 "QUERYGATE_STATEMENT_TIMEOUT", DEFAULT_STATEMENT_TIMEOUT, env
             ),
             redact_path=_env_str("QUERYGATE_REDACT_PATH", None, env),
+            audit_path=_env_str("QUERYGATE_AUDIT_PATH", DEFAULT_AUDIT_PATH, env)
+            or DEFAULT_AUDIT_PATH,
             work_mem=_env_str("QUERYGATE_WORK_MEM", None, env),
             decimal_as_str=_env_bool("QUERYGATE_DECIMAL_AS_STR", False, env),
         )

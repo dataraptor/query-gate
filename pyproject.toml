@@ -22,6 +22,9 @@ dependencies = [
     "sqlglot==25.34.0",
     # YAML parser for the optional redact.yaml column-redaction config (spec §8).
     "pyyaml==6.0.3",
+    # Typed tool I/O contracts (RunResult / AuditLine); the mcp SDK derives the tool JSON
+    # schema from these and the audit log round-trips through them (spec §7).
+    "pydantic==2.10.4",
 ]
 
 [project.optional-dependencies]
