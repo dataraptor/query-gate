@@ -1,0 +1,15 @@
+# QueryGate column redaction (spec §8) — OFF by default.
+#
+# Redaction is only loaded when QUERYGATE_REDACT_PATH points at this file. When loaded,
+# the result filter (Split 5) replaces the listed columns' cells with "***" and records
+# them in RunResult and the audit line. This is deliberately lightweight column masking —
+# NOT row-level security or true de-identification (those are §21). Note: redaction hides
+# columns from the *result*, not from WHERE/aggregates (§18).
+#
+# Format: a mapping of table -> [columns]. Uncomment to mask the PHI-conscious cut.
+#
+# patients:
+#   - name
+#   - dob
+# claims:
+#   - amount
