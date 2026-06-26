@@ -1,0 +1,4 @@
+# Keep LF on files that run inside Linux containers / are fed to psql, so a Windows
+# checkout (autocrlf) can't inject CR characters that break bash or the SQL scripts.
+*.sh   text eol=lf
+*.sql  text eol=lf

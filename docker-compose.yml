@@ -1,0 +1,53 @@
+# QueryGate — one-command local bring-up (spec §8).
+#
+#   cp .env.example .env        # (first time only — adjust passwords if you like)
+#   docker compose up           # Postgres + schema + Layer-3 role + seeded data
+#
+# On first init the Postgres container runs scripts/schema.sql then the Layer-3
+# role/grants (docker-init-role.sh -> init_role.sql); once it is healthy, the one-shot
+# `seeder` service loads the deterministic dataset. After it exits, the DB is ready and
+# the read-only `querygate` role is in place. Re-running `docker compose up` re-seeds
+# (idempotent) without dropping the role or its grants.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-querygate_admin}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-admin_pw}"
+      POSTGRES_DB: "${POSTGRES_DB:-querygate}"
+      QUERYGATE_DB_PASSWORD: "${QUERYGATE_DB_PASSWORD:-querygate_pw}"
+    ports:
+      - "${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - querygate-pgdata:/var/lib/postgresql/data
+      # initdb hooks run alphabetically, once, on an empty data dir:
+      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./scripts/docker-init-role.sh:/docker-entrypoint-initdb.d/02-init-role.sh:ro
+      - ./scripts/init_role.sql:/init/init_role.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot data loader: pip-installs the pinned deps and runs the deterministic seed
+  # as the admin role, then exits. Kept as a runtime install so no extra Dockerfile is needed.
+  seeder:
+    image: python:3.12-slim
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-querygate_admin}:${POSTGRES_PASSWORD:-admin_pw}@db:5432/${POSTGRES_DB:-querygate}"
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    working_dir: /app
+    command:
+      - bash
+      - -c
+      - "pip install --quiet 'psycopg[binary]==3.2.3' 'faker==30.8.2' && python scripts/seed.py --reset"
+    restart: "no"
+
+volumes:
+  querygate-pgdata:

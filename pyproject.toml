@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "querygate"
+version = "0.1.0"
+description = "QueryGate — a read-only MCP server that answers questions over Postgres without ever being able to write."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Shamim Ahamed" }]
+dependencies = [
+    # Pinned exactly: Faker's output drifts across versions even with a fixed seed,
+    # which would silently shift the synthetic data the eval's frozen numbers depend on.
+    "faker==30.8.2",
+    # Postgres driver used by the seed loader and (in later splits) the server.
+    "psycopg[binary]==3.2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+]
+
+[tool.setuptools]
+packages = ["querygate"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
