@@ -24,13 +24,24 @@ dependencies = [
     "pyyaml==6.0.3",
     # Typed tool I/O contracts (RunResult / AuditLine); the mcp SDK derives the tool JSON
     # schema from these and the audit log round-trips through them (spec §7).
-    "pydantic==2.10.4",
+    # Bumped from 2.10.4 → 2.13.4 in Split 06: the mcp SDK requires pydantic>=2.11. The models
+    # are simple/stable and the full pre-existing suite stays green on the bump (see PROGRESS.md).
+    "pydantic==2.13.4",
+    # The official MCP SDK — FastMCP app, @mcp.tool(), instructions=, stdio + Streamable-HTTP.
+    # This is what QueryGate *is*: the server half of "MCP" (Appendix A). Pinned because the
+    # published tool schema and the transport behaviour are part of the product contract.
+    "mcp==1.28.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest==8.3.4",
 ]
+
+[project.scripts]
+# Default, no-arg behavior = the stdio MCP server (spec §12-A / §15). The full CLI is Split 07;
+# `uv run querygate` / `python -m querygate` both launch the stdio server via this entry point.
+querygate = "querygate.server:main"
 
 [tool.setuptools]
 packages = ["querygate"]

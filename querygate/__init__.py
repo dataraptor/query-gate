@@ -9,6 +9,8 @@ read-only boundary: guard → read-only transaction → least-privilege role) pl
 
 from .config import Config
 from .models import AuditLine, ColumnInfo, RunResult, TableInfo, TableSchema
+from .prompts import PROMPT_VERSION, SERVER_INSTRUCTIONS
+from .server import build_server
 from .tools import (
     RunRejected,
     ToolRejected,
@@ -33,5 +35,8 @@ __all__ = [
     "ColumnInfo",
     "TableSchema",
     "Config",
+    "build_server",
+    "PROMPT_VERSION",
+    "SERVER_INSTRUCTIONS",
     "__version__",
 ]
