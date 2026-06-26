@@ -39,9 +39,10 @@ dev = [
 ]
 
 [project.scripts]
-# Default, no-arg behavior = the stdio MCP server (spec §12-A / §15). The full CLI is Split 07;
-# `uv run querygate` / `python -m querygate` both launch the stdio server via this entry point.
-querygate = "querygate.server:main"
+# The CLI dispatch (spec §15): bare `querygate` = the stdio MCP server (default); `seed` / `query` /
+# `eval` subcommands + the `--http` flag route through `querygate.cli:main`. `uv run querygate` /
+# `python -m querygate` both resolve here.
+querygate = "querygate.cli:main"
 
 [tool.setuptools]
 packages = ["querygate"]
