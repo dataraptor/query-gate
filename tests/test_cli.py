@@ -161,14 +161,17 @@ def test_c6_bare_querygate_runs_stdio_server(monkeypatch):
     assert called.get("stdio") is True
 
 
-def test_c6_stdio_server_still_builds_the_four_tools():
-    # The Split-06 smoke: the server the CLI default launches still registers the four tools.
+def test_c6_stdio_server_still_builds_the_tools():
+    # The Split-06 smoke: the server the CLI default launches still registers the read tools
+    # (Split 13 added explain_select as the optional fifth — see SPLIT-13 R3).
     from querygate.config import Config
     from querygate.server import build_server
 
     server = build_server(Config())
     names = set(server._tool_manager._tools.keys())
-    assert names == {"list_tables", "describe_table", "run_select", "search_text"}
+    assert names == {
+        "list_tables", "describe_table", "run_select", "search_text", "explain_select"
+    }
 
 
 # ==================================================================================================

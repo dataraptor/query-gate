@@ -1,7 +1,8 @@
 """The MCP server — a thin FastMCP shell around the Split-04/05 library (spec §6, §12-A, App A).
 
-This module makes QueryGate a **real MCP server**: a :class:`FastMCP` app that registers the four
-read-only tools, publishes a minimal well-formed ``inputSchema`` for each, ships the verbatim server
+This module makes QueryGate a **real MCP server**: a :class:`FastMCP` app that registers the
+read-only tools (the four core + the optional ``explain_select``, spec §6/§20), publishes a minimal
+well-formed ``inputSchema`` for each, ships the verbatim server
 ``instructions=`` (:data:`~querygate.prompts.SERVER_INSTRUCTIONS`), and runs over **stdio** so Claude
 Desktop / Claude Code can connect.
 
@@ -45,11 +46,15 @@ TOOL_DESCRIPTIONS = {
         "Fuzzy-search text columns for a term when you don't know the exact value "
         "(e.g. a name spelled differently)."
     ),
+    "explain_select": (
+        "Show the query plan and estimated cost for a SELECT without running it. "
+        "Use to check a heavy query before running it."
+    ),
 }
 
 
 def build_server(config: Config | None = None) -> FastMCP:
-    """Build the ``querygate`` FastMCP app with the four tools registered.
+    """Build the ``querygate`` FastMCP app with the read tools registered.
 
     ``config`` is resolved once here (defaulting to :meth:`Config.from_env`) and closed over by every
     tool, so the published tool schemas never expose the ``config`` argument and a test can inject a
@@ -74,6 +79,10 @@ def build_server(config: Config | None = None) -> FastMCP:
     @mcp.tool(name="search_text", description=TOOL_DESCRIPTIONS["search_text"])
     def search_text(term: str, table: str | None = None) -> RunResult:
         return _tools.search_text(term, table, config=cfg)
+
+    @mcp.tool(name="explain_select", description=TOOL_DESCRIPTIONS["explain_select"])
+    def explain_select(sql: str) -> RunResult:
+        return _tools.explain_select(sql, config=cfg)
 
     # Keep the published inputSchema minimal *and* closed: a one-field-per-arg schema plus
     # `additionalProperties: false`, so e.g. run_select advertises exactly {sql: str, required,

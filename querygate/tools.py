@@ -26,6 +26,7 @@ and the citation SQL honest; the precise ``LIMIT row_limit + 1`` alternative is 
 
 from __future__ import annotations
 
+import re
 import time
 
 from .audit import append_audit, now_rfc3339
@@ -46,6 +47,7 @@ __all__ = [
     "list_tables",
     "describe_table",
     "search_text",
+    "explain_select",
     "RunRejected",
     "ToolRejected",
 ]
@@ -473,5 +475,84 @@ def search_text(term: str, table: str | None = None, *, config: Config | None = 
     _audit(
         cfg, "search_text", args, status="ok", row_count=result.row_count,
         error=None, redactions=sorted(masked_pairs), started=started,
+    )
+    return result
+
+
+# ==================================================================================================
+# explain_select — the optional plan tool (spec §6, §20). Plain EXPLAIN only; ANALYZE rejected.
+# ==================================================================================================
+
+#: A leading ``EXPLAIN [( ... )]`` / ``EXPLAIN [ANALYZE|VERBOSE]…`` clause, if the caller wrote one.
+#: ``opts`` is either a parenthesised option list (new syntax) or a run of bare legacy keywords; we
+#: only need it to (a) detect ``ANALYZE`` and (b) strip the prefix down to the inner SELECT, which is
+#: then handed to the Layer-1 guard. Built to match BOTH ``EXPLAIN (ANALYZE)`` and ``EXPLAIN ANALYZE``.
+_EXPLAIN_PREFIX = re.compile(
+    r"^\s*EXPLAIN\b(?P<opts>\s*\([^)]*\)|(?:\s+(?:ANALYZE|VERBOSE))*)",
+    re.IGNORECASE,
+)
+
+
+def explain_select(sql: str, *, config: Config | None = None) -> RunResult:
+    """Return the ``EXPLAIN`` plan for a read-only ``SELECT`` **without running it** (spec §6).
+
+    The query plan + estimated cost — useful to check a heavy query before paying to run it. The
+    boundary is the same Layer-1 guard :func:`run_select` uses (so writes, data-modifying CTEs, the
+    denylist, and ``;``-chains are all rejected), with **one extra rule**: plain ``EXPLAIN`` is
+    planning-only and read-only, but ``EXPLAIN (ANALYZE)`` / ``EXPLAIN ANALYZE`` *executes* the query
+    (a write risk + real cost) and is **rejected** (rule ``explain_analyze``).
+
+    ``sql`` is the ``SELECT`` to plan; a leading plain ``EXPLAIN`` the agent may have written is
+    accepted and stripped (an ``ANALYZE`` in it is rejected). Returns a :class:`RunResult` whose
+    single ``QUERY PLAN`` column carries the plan lines. Writes exactly one audit line, like every
+    tool. Raises :class:`RunRejected` on any rejection (the SQL is never executed).
+    """
+    cfg = _resolve(config)
+    args = {"sql": sql}
+    started = time.monotonic()
+
+    # --- Strip a leading EXPLAIN clause and reject ANALYZE (it would EXECUTE the query). --------
+    inner = sql
+    m = _EXPLAIN_PREFIX.match(sql)
+    if m is not None:
+        if re.search(r"\bANALYZE\b", m.group(0), re.IGNORECASE):
+            reason = (
+                "EXPLAIN (ANALYZE) executes the query — only a plain, planning-only EXPLAIN is "
+                "allowed (the database is read-only)"
+            )
+            _audit(
+                cfg, "explain_select", args, status="rejected", row_count=None,
+                error=reason, redactions=[], started=started,
+            )
+            raise RunRejected("explain_analyze", reason)
+        inner = sql[m.end():]
+
+    # --- Layer 1: the same SQL guard run_select uses. On reject, nothing reaches the DB. -------
+    decision = guard_select(inner, row_limit=cfg.row_limit)
+    if not decision.ok:
+        _audit(
+            cfg, "explain_select", args, status="rejected", row_count=None,
+            error=decision.reason, redactions=[], started=started,
+        )
+        raise RunRejected(decision.rule or "rejected", decision.reason or "rejected by guard")
+
+    explain_sql = f"EXPLAIN {decision.sql or inner}"
+
+    # --- Layers 2 + 3: plan the query (EXPLAIN runs no rows) inside the read-only txn. ----------
+    exec_start = time.monotonic()
+    try:
+        columns, raw_rows = run_readonly(explain_sql, config=cfg)
+        result, redactions = _build_run_result(cfg, columns, raw_rows, explain_sql, table=None)
+    except (DBError, SerializationError) as exc:
+        _audit(
+            cfg, "explain_select", args, status="error", row_count=None,
+            error=str(exc), redactions=[], started=started,
+        )
+        raise
+    result.elapsed_ms = round((time.monotonic() - exec_start) * 1000)
+
+    _audit(
+        cfg, "explain_select", args, status="ok", row_count=result.row_count,
+        error=None, redactions=redactions, started=started,
     )
     return result

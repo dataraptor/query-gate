@@ -1,15 +1,29 @@
-# QueryGate column redaction (spec §8) — OFF by default.
+# QueryGate column redaction — the PHI-conscious cut (spec §8, §20).
 #
-# Redaction is only loaded when QUERYGATE_REDACT_PATH points at this file. When loaded,
-# the result filter (Split 5) replaces the listed columns' cells with "***" and records
-# them in RunResult and the audit line. This is deliberately lightweight column masking —
-# NOT row-level security or true de-identification (those are §21). Note: redaction hides
-# columns from the *result*, not from WHERE/aggregates (§18).
+# Redaction is OFF BY DEFAULT: it is loaded only when QUERYGATE_REDACT_PATH points at this file,
+# and QUERYGATE_REDACT_PATH is unset by default (so the demo's answers stay legible). To run the
+# demo with redaction ON — one step, no code change:
 #
-# Format: a mapping of table -> [columns]. Uncomment to mask the PHI-conscious cut.
+#   QUERYGATE_REDACT_PATH=redact.yaml querygate query "SELECT name, dob FROM app.patients LIMIT 5"
 #
-# patients:
-#   - name
-#   - dob
+# When loaded, the deterministic result filter (Split 5) replaces the listed columns' cells with
+# "***" in every result and records the masked columns in RunResult.redactions AND the audit line —
+# "HIPAA-aware as a switch a reviewer can flip and see honored in the audit log."
+#
+# Deliberately lightweight column masking — NOT row-level security or true de-identification
+# (those are the §21 roadmap). And redaction hides columns from the *result*, not from
+# WHERE / aggregates: a count or filter over a masked column still works, the value just isn't
+# returned (§18). So `SELECT count(*) FROM app.patients WHERE name ILIKE 'A%'` still returns the
+# true count with redaction on.
+#
+# Format: a mapping of table -> [columns]. (run_select matches by output column name, so a
+# configured `patients.name` also masks any result column literally named `name` — the safe
+# over-mask direction for a PHI control; describe_table / search_text redact precisely by table.)
+
+patients:
+  - name
+  - dob
+
+# Uncomment to also mask the claim dollar amounts (the money columns):
 # claims:
 #   - amount

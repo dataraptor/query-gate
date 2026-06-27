@@ -31,7 +31,7 @@ from querygate.prompts import PROMPT_VERSION, SERVER_INSTRUCTIONS
 from querygate.server import TOOL_DESCRIPTIONS, build_server
 from mcp.shared.memory import create_connected_server_and_client_session as connect
 
-REGISTERED = {"list_tables", "describe_table", "run_select", "search_text"}
+REGISTERED = {"list_tables", "describe_table", "run_select", "search_text", "explain_select"}
 APP_TABLES = {"patients", "providers", "encounters", "claims", "follow_ups"}
 
 
@@ -120,6 +120,10 @@ def test_s1_tool_descriptions_are_verbatim_per_section6(meta_server):
     assert TOOL_DESCRIPTIONS["search_text"] == (
         "Fuzzy-search text columns for a term when you don't know the exact value "
         "(e.g. a name spelled differently)."
+    )
+    assert TOOL_DESCRIPTIONS["explain_select"] == (
+        "Show the query plan and estimated cost for a SELECT without running it. "
+        "Use to check a heavy query before running it."
     )
 
 

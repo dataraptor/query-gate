@@ -36,7 +36,7 @@ import pytest
 from querygate.server import HTTP_HOST, HTTP_PATH, build_http_server
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-REGISTERED = {"list_tables", "describe_table", "run_select", "search_text"}
+REGISTERED = {"list_tables", "describe_table", "run_select", "search_text", "explain_select"}
 OVERDUE_SQL = (
     "SELECT count(*) FROM app.follow_ups WHERE completed_at IS NULL AND due_date < now()"
 )
