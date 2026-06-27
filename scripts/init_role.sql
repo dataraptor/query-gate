@@ -35,6 +35,10 @@ $$;
 ALTER ROLE querygate SET default_transaction_read_only = on;
 -- Conservative memory ceiling (spec §5 memory note) so a heavy SELECT can't exhaust RAM.
 ALTER ROLE querygate SET work_mem = '16MB';
+-- Put the `app` schema on the role's search_path so an agent that only knows the bare table
+-- names list_tables reports (e.g. "patients") can query them without guessing the schema.
+-- Security-neutral: search_path grants nothing; the SELECT-only privileges below are unchanged.
+ALTER ROLE querygate SET search_path = app, public;
 
 -- Schema access: USAGE only on `app`; nothing writable.
 GRANT USAGE ON SCHEMA app TO querygate;

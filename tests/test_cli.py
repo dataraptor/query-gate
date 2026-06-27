@@ -3,8 +3,8 @@
 The headline gate (C-2): ``querygate query "DELETE …"`` visibly **refuses** and exits non-zero,
 with the SQL never reaching the DB — the by-hand boundary demo. Plus the cited happy path (C-1),
 read-only role (C-3), one audit line per call (C-4), deterministic ``seed --reset`` through the CLI
-(C-5), bare = stdio server (C-6), the clean ``--http``/``eval`` stubs (C-7/C-8), and side-effect-free
-library imports (C-9).
+(C-5), bare = stdio server (C-6), the clean ``--http`` stub (C-7), the eval wired to the real Split-09
+harness with an honest no-DB failure (C-8), and side-effect-free library imports (C-9).
 
 The pure tests (C-6/C-7/C-8/C-9) need neither DB nor key and always run. The DB-backed query/seed
 tests use the read-only role / admin URL via the shared conftest and skip cleanly when absent.
@@ -191,17 +191,28 @@ def test_c7_http_with_port_fails_cleanly(capsys):
 
 
 # ==================================================================================================
-# C-8 — eval stub is honest (no fabricated metrics).
+# C-8 — the eval is wired to the real harness (Split 09) and fails HONESTLY without a DB/key.
 # ==================================================================================================
 
 
-def test_c8_eval_stub_prints_no_fake_metrics(capsys):
-    rc = cli.main(["eval"])
+def test_c8_eval_wired_and_fails_honestly_without_db(monkeypatch, capsys):
+    # Split 09 landed the real harness, so the CLI delegates to it (no more "arrives in Split 09" stub).
+    assert cli.EVAL_SCRIPT.exists(), "querygate eval should delegate to evals/run_eval.py"
+
+    # Honesty rule: with the read-only DB URL absent, the harness must fail clean (non-zero) with a
+    # clear message and print NO fabricated metrics — never invent numbers. Call run_eval() directly
+    # (not via subprocess) so the test stays fast and never touches the model API.
+    from evals import run_eval
+
+    monkeypatch.delenv("QUERYGATE_DATABASE_URL", raising=False)
+    rc = run_eval.run_eval(
+        repeats=1, quick=True, model="gpt-5.5", out=None,
+        price_in=None, price_out=None, max_steps=1,
+    )
     assert rc != 0
     err = capsys.readouterr().err
-    assert "Split 09" in err
-    # No invented eval numbers from a stub (the honesty rule).
-    for fake in ("grounded-rate", "table-precision", "%", "mean"):
+    assert "QUERYGATE_DATABASE_URL" in err
+    for fake in ("grounded-rate", "table-precision", "mean +/-"):
         assert fake not in err
 
 

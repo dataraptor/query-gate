@@ -37,6 +37,13 @@ dependencies = [
 dev = [
     "pytest==8.3.4",
 ]
+# The grounding eval (Split 09) drives the agent-under-test via the OpenAI SDK (Azure GPT-5.5 for
+# this project — the repo has no Anthropic key). Kept optional: Tier-1 + the scorer unit tests need
+# neither a key nor this dependency; only the live `querygate eval` run does.
+eval = [
+    "openai>=1.55",
+    "python-dotenv>=1.0",
+]
 
 [project.scripts]
 # The CLI dispatch (spec §15): bare `querygate` = the stdio MCP server (default); `seed` / `query` /
@@ -49,3 +56,6 @@ packages = ["querygate"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the repo root on sys.path so the scorer tests can `import evals.scoring` (the `evals/`
+# tree is run/tested in-place, not installed as a package).
+pythonpath = ["."]
