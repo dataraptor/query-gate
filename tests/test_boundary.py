@@ -126,8 +126,10 @@ def test_b1_data_modifying_cte_and_chain_rejected_end_to_end(ro_config):
         "UPDATE app.claims SET amount = 0 WHERE claim_id = -1",
     ],
 )
-def test_b2_readonly_txn_rejects_write_isolated(admin_url, admin_conn, sql):
-    """Issued as the write-capable ADMIN role, so the ONLY barrier is the READ ONLY transaction.
+def test_b2_layer2_readonly_txn_rejects_write_isolated(admin_url, admin_conn, sql):
+    """LAYER 2 (READ ONLY transaction) — write rejected independently.
+
+    Issued as the write-capable ADMIN role, so the ONLY barrier is the READ ONLY transaction.
     The error must specifically name the read-only transaction (Layer 2), independent of Layer 3.
     """
     admin_cfg = Config(database_url=admin_url)
@@ -153,8 +155,10 @@ def test_b2_readonly_txn_rejects_write_isolated(admin_url, admin_conn, sql):
         "UPDATE app.claims SET amount = 0 WHERE claim_id = -1",
     ],
 )
-def test_b3_role_rejects_write_isolated(role_url, seeded_db, sql):
-    """Issued as the querygate read-only role with the transaction forced READ WRITE, overriding
+def test_b3_layer3_role_rejects_write_isolated(role_url, seeded_db, sql):
+    """LAYER 3 (least-privilege DB role) — write rejected independently.
+
+    Issued as the querygate read-only role with the transaction forced READ WRITE, overriding
     default_transaction_read_only. With Layer 2 neutralized, the ONLY barrier is the missing
     write grant — the error must be 'permission denied' (Layer 3), independent of Layer 2.
     """

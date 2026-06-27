@@ -1,0 +1,77 @@
+# QueryGate — Tier-1 deterministic CI (the per-commit ship gate, spec §13 / §17 S5).
+#
+# This is the load-bearing promise made testable: "the server cannot execute a write —
+# proven in CI, not promised in a README." The job stands up a real Postgres 16, applies
+# the Layer-3 role (init_role.sql) + the fixed deterministic seed, and runs the full Tier-1
+# pytest suite. The centerpiece is the boundary test, which rejects a write at each of the
+# three layers INDEPENDENTLY (test_b1_layer1_* / test_b2_layer2_* / test_b3_layer3_*).
+#
+# Tier-1 is keyless and deterministic — NO ANTHROPIC_API_KEY is set or needed (the
+# distributional grounding eval is Tier-2, Split 09: nightly/on-demand, never per-commit).
+name: Tier-1 CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tier1:
+    name: Tier-1 boundary suite (Postgres 16, no API key)
+    runs-on: ubuntu-latest
+
+    # A real Postgres 16 on the runner — the same image docker-compose uses locally.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: querygate
+        ports:
+          - 5432:5432
+        # Don't start the suite until Postgres is actually accepting connections.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # The admin/migration URL. conftest.py derives the read-only querygate role URL from this
+      # (host/port/db + the querygate user/password created by init_role.sql) and applies
+      # schema.sql + init_role.sql + the seed via psql — exactly the docker-compose artifacts.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/querygate
+      # Pin the role password so the derived read-only URL matches init_role.sql's -v pw=...
+      QUERYGATE_DB_PASSWORD: querygate_pw
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The Tier-1 conftest applies schema.sql / init_role.sql with `psql` (the exact artifacts
+      # compose uses). ubuntu-latest ships a psql client; install it explicitly to be robust.
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Install from the pinned pyproject.toml. The Faker pin (Split 01) is load-bearing for
+      # determinism — CI proves the fixed seed reproduces byte-identically on a clean machine.
+      - name: Install querygate (pinned deps)
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      # Run the full deterministic suite. The conftest brings the DB up (schema → Layer-3 role →
+      # seed) once per session, then every read test runs as the least-privilege querygate role.
+      # No ANTHROPIC_API_KEY in scope — Tier-1 is keyless (CI-3).
+      - name: Run Tier-1 suite
+        run: python -m pytest -v --tb=short | tee pytest-output.txt
+
+      # Upload the run log so the README can link to the screenshot-worthy boundary proof.
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier1-pytest-output
+          path: pytest-output.txt
