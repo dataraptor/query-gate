@@ -51,6 +51,14 @@ REJECT_CASES = [
     # Empty / whitespace → not a single valid SELECT.
     ("", "parse_error"),
     ("   ", "parse_error"),
+    # A projection-less SELECT parses to an empty Select but is malformed — reject, don't let it
+    # reach the DB as a bare ``SELECT LIMIT n``.
+    ("SELECT", "not_a_select"),
+    ("SELECT FROM patients", "not_a_select"),
+    # Dangerous-function siblings of already-denied calls (network / large-object / WAL-write).
+    ("SELECT dblink_connect('host=evil')", "denylisted_function"),
+    ("SELECT lo_put(1, 0, 'x')", "denylisted_function"),
+    ("SELECT pg_logical_emit_message(true, 'a', 'b')", "denylisted_function"),
     # Two SELECTs → multi-statement.
     ("SELECT * FROM a; SELECT * FROM b", "multi_statement"),
     # Comment/whitespace obfuscation does not hide a second statement.

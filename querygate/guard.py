@@ -76,16 +76,31 @@ DENYLISTED_FUNCTIONS: frozenset[str] = frozenset(
         "pg_stat_file",
         "lo_import",
         "lo_export",
+        "lo_get",
+        "lo_put",
         "copy_to",
         "copy_from",
         "dblink",
         "dblink_exec",
+        "dblink_connect",
+        "dblink_connect_u",
+        "dblink_open",
+        "dblink_send_query",
+        "dblink_get_result",
         "pg_sleep",
         "pg_sleep_for",
         "set_config",
         "pg_terminate_backend",
         "pg_cancel_backend",
+        "pg_logical_emit_message",
+        "pg_ls_waldir",
+        "pg_ls_logdir",
+        "pg_ls_tmpdir",
+        "pg_ls_archive_statusdir",
         "query_to_xml",
+        "database_to_xml",
+        "schema_to_xml",
+        "table_to_xml",
         "xpath",
         "nextval",
         "setval",
@@ -226,6 +241,18 @@ def guard_select(sql: str, row_limit: int = DEFAULT_ROW_LIMIT) -> GuardResult:
             "not_a_select",
             f"top-level statement is {type(root).__name__}, not a SELECT / WITH … SELECT",
         )
+
+    # A genuine read query must actually project something. ``SELECT`` / ``SELECT FROM t`` (no
+    # projection) parse to a Select with empty ``expressions``; without this they slip the guard and
+    # only fail at the DB as a malformed ``SELECT LIMIT n``. Fail closed on any empty SELECT in the
+    # tree (a legitimate SELECT always projects ≥1 expression).
+    for select in root.find_all(exp.Select):
+        if not select.expressions:
+            return GuardResult.reject(
+                "not_a_select",
+                "query has an empty SELECT (no projected columns); expected a read query that "
+                "returns data",
+            )
 
     # --- Auto-LIMIT the outermost query (preserve any existing outer LIMIT) -------------------
     # ``args['limit']`` is the OUTER query's LIMIT for both a Select and a set-operation root;
