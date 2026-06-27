@@ -7,6 +7,8 @@ One binary, four jobs:
   localhost (``http://localhost:8000/mcp``), the path the Messages API MCP connector uses (Split 10).
 * ``querygate seed [--reset]``        — (re)build the synthetic DB from the fixed seed (Split 01),
   connecting as the **admin** ``DATABASE_URL`` (seeding needs the privileged role).
+* ``querygate web [--port 8000]``     — serve the live web demo: the static ``app/`` UI + the
+  ``/api/*`` adapter that runs the real agent loop and streams UI-shaped events (Split 11). Localhost.
 * ``querygate query "<SELECT ...>"``  — run one SELECT through the **full three-layer boundary** by
   hand and print the cited :class:`~querygate.models.RunResult` (or ``--json``). A write visibly
   **refuses** and exits non-zero — the by-hand boundary demo (the Session-1/3 "verified by hand" DoD).
@@ -180,6 +182,24 @@ def _cmd_query(args: argparse.Namespace) -> int:
 # ==================================================================================================
 
 
+def _cmd_web(args: argparse.Namespace) -> int:
+    """Serve the live web demo: the static ``app/`` UI + the ``/api/*`` adapter on localhost (R4).
+
+    One command brings up the whole demo (the §8 "one command" ethos). The adapter runs the **real**
+    agent loop over the read-only boundary and streams UI-shaped events (Split 11); it serves the UI
+    files unmodified. Localhost-only, no auth (§19). Delegates to ``querygate.api.server`` — no logic
+    here. Blocks until interrupted.
+    """
+    from .api import server
+
+    print(
+        f"querygate web - serving the demo on http://{server.HOST}:{args.port} "
+        f"(UI + /api/ask + /api/eval). Ctrl-C to stop.",
+    )
+    server.serve(host=server.HOST, port=args.port)
+    return EXIT_OK
+
+
 def _cmd_eval(args: argparse.Namespace) -> int:
     if EVAL_SCRIPT.exists():
         # Split 09 landed the real harness — delegate to it, forwarding the parsed flags verbatim.
@@ -222,7 +242,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--port", type=int, default=8000, help="port for --http (default: 8000)",
     )
 
-    sub = parser.add_subparsers(dest="command", metavar="{seed,query,eval}")
+    sub = parser.add_subparsers(dest="command", metavar="{seed,query,web,eval}")
 
     s = sub.add_parser("seed", help="(re)build the synthetic DB from the fixed seed")
     s.add_argument("--reset", action="store_true", help="truncate and reload (seeding always resets)")
@@ -236,6 +256,10 @@ def _build_parser() -> argparse.ArgumentParser:
     q.add_argument("sql", help="the SELECT statement to run (writes are rejected)")
     q.add_argument("--json", action="store_true", help="print the raw RunResult JSON (for scripting)")
     q.set_defaults(func=_cmd_query)
+
+    w = sub.add_parser("web", help="serve the live web demo (static UI + /api adapter) on localhost")
+    w.add_argument("--port", type=int, default=8000, help="port for the web demo (default: 8000)")
+    w.set_defaults(func=_cmd_web)
 
     e = sub.add_parser("eval", help="run the grounding eval [Split 09]")
     e.add_argument("--repeats", type=int, default=None, help="repeats per question")

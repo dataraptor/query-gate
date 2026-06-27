@@ -52,6 +52,14 @@ connector = [
     "anthropic>=0.40",
     "python-dotenv>=1.0",
 ]
+# The web demo adapter (Split 11): `querygate web` serves the static `app/` UI + the `/api/*`
+# streaming adapter. Starlette + uvicorn already ship transitively with `mcp` (the Streamable-HTTP
+# transport uses them); pinned loosely here so a fresh install of this extra is self-contained. The
+# live `/api/ask` loop additionally needs the `eval` extra (the OpenAI/Azure client + the gold set).
+web = [
+    "starlette>=0.37",
+    "uvicorn>=0.30",
+]
 
 [project.scripts]
 # The CLI dispatch (spec §15): bare `querygate` = the stdio MCP server (default); `seed` / `query` /
@@ -60,7 +68,11 @@ connector = [
 querygate = "querygate.cli:main"
 
 [tool.setuptools]
-packages = ["querygate"]
+packages = ["querygate", "querygate.api"]
+
+[tool.setuptools.package-data]
+# The web demo's redaction toggle config (Split 11) ships with the package.
+"querygate.api" = ["redact_demo.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,13 @@
+# QueryGate web demo — redaction config the `redaction: true` toggle loads (Split 11/12).
+#
+# The root-level redact.yaml ships OFF (all entries commented) so the default boundary demo shows
+# real names. This file is the *demo* PHI cut: when the UI's redaction switch is on, POST /api/ask
+# loads this, and the result filter (Split 05) masks these columns to "***" in every result + records
+# them in the RunResult.redactions / audit line. Mapping: RunResult.redactions -> citation.phiCols.
+#
+# Note (documented Split-05 behavior): run_select redaction matches by OUTPUT column name, so a
+# configured `patients.name` also masks any other result column literally named `name` (e.g. a
+# provider `name`). That is the safe over-mask direction for a PHI control.
+patients:
+  - name
+  - dob

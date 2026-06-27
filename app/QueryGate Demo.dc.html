@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{background:#F6F7F9;color:#16181D;font-family:'Onest',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;text-wrap:pretty;overflow:hidden}
+  .qg-mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#DBDFE5;border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#C6CCD4}
+  ::-webkit-scrollbar-track{background:transparent}
+  input,button{font-family:inherit}
+  input:focus-visible,button:focus-visible{outline:2px solid #2F6FED;outline-offset:2px}
+  @keyframes qgSlideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes qgFade{from{opacity:0}to{opacity:1}}
+  @keyframes qgRing{0%{box-shadow:0 0 0 0 rgba(14,147,132,.4)}70%{box-shadow:0 0 0 13px rgba(14,147,132,0)}100%{box-shadow:0 0 0 0 rgba(14,147,132,0)}}
+  @keyframes qgPulse{0%,100%{opacity:.5}50%{opacity:1}}
+  @keyframes qgShimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
+  @keyframes qgTravel{0%{left:6%;opacity:0}20%{opacity:1}100%{left:78%;opacity:1}}
+  @keyframes qgSlam{0%{left:6%;opacity:0}25%{opacity:1}55%{left:30%;opacity:1}60%{left:27%}100%{left:28%;opacity:1}}
+  .qg-skel{background:linear-gradient(90deg,#EEF0F4,#F6F8FA,#EEF0F4);background-size:400px 100%;animation:qgShimmer 1.3s infinite linear}
+  #qg-grid{display:flex;flex:1;min-height:0}
+  .qg-panel{min-height:0;overflow:auto}
+  .qg-resizer{flex:0 0 auto;width:8px;margin:0 -4px;cursor:col-resize;position:relative;z-index:6;background:transparent;transition:background .12s}
+  .qg-resizer:hover{background:rgba(47,111,237,.10)}
+  .qg-resizer:active{background:rgba(47,111,237,.18)}
+  #qg-mobilebar{display:none}
+  .qg-backdrop{display:none}
+  @media(max-width:1000px){
+    .qg-resizer{display:none!important}
+    .qg-schema,.qg-proof{position:fixed!important;top:0;bottom:0;z-index:50;width:min(90vw,376px)!important;box-shadow:0 24px 64px -20px rgba(17,24,39,.3)}
+    .qg-schema{left:0}
+    .qg-proof{right:0}
+    .qg-schema:not(.open){display:none!important}
+    .qg-proof:not(.open){display:none!important}
+    #qg-mobilebar{display:flex}
+    .qg-backdrop{display:block;position:fixed;inset:0;background:rgba(17,24,39,.3);opacity:0;pointer-events:none;transition:opacity .3s;z-index:45}
+    .qg-backdrop.open{opacity:1;pointer-events:auto}
+    .qg-hide-sm{display:none!important}
+  }
+  @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.08s!important}}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;background:#F6F7F9">
+
+  <header style="flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:11px clamp(12px,2vw,22px);background:#FFFFFF;box-shadow:0 1px 0 rgba(17,24,39,.07);position:relative;z-index:10">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:23px;height:23px;border-radius:7px;background:linear-gradient(140deg,#2F6FED,#0E9384)"></div>
+      <div style="line-height:1.1">
+        <div style="font-weight:600;font-size:15px;letter-spacing:-.015em;color:#16181D">QueryGate</div>
+        <div class="qg-hide-sm" style="font-size:11px;color:#8B919B;margin-top:1px">read-only MCP server · demo</div>
+      </div>
+    </div>
+    <div class="qg-hide-sm" style="display:flex;align-items:center;gap:7px;margin-left:8px;padding:4px 10px;border-radius:7px;background:#FBF4E9">
+      <span style="width:6px;height:6px;border-radius:50%;background:#D97706"></span>
+      <span style="font-size:11.5px;color:#946A2A">synthetic data · demo, not a real service</span>
+    </div>
+    <div style="flex:1"></div>
+    <button onClick="{{ cycleModel }}" class="qg-mono" style="display:flex;align-items:center;gap:7px;padding:6px 11px;border:none;border-radius:8px;background:#F2F4F7;color:#3C4250;font-size:11.5px;cursor:pointer">
+      <span style="width:6px;height:6px;border-radius:50%;background:#2F6FED"></span>{{ model }}
+    </button>
+    <div class="qg-mono" style="display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;background:#ECFDF3;color:#047857;font-size:11.5px">{{ costStr }}</div>
+    <button onClick="{{ cycleTransport }}" class="qg-mono qg-hide-sm" style="display:flex;align-items:center;gap:7px;padding:6px 11px;border:none;border-radius:8px;background:#F2F4F7;color:#5A626E;font-size:11.5px;cursor:pointer">
+      {{ transport }}<span style="width:6px;height:6px;border-radius:50%;background:{{ transportDot }}"></span>
+    </button>
+  </header>
+
+  <div id="qg-mobilebar" style="flex:0 0 auto;gap:8px;padding:8px 12px;background:#FFFFFF;box-shadow:0 1px 0 rgba(17,24,39,.07);position:relative;z-index:9">
+    <button onClick="{{ toggleSchema }}" style="flex:1;padding:8px;border:none;border-radius:8px;background:#F2F4F7;color:#3C4250;font-size:13px;cursor:pointer">▤ Schema</button>
+    <button onClick="{{ toggleProof }}" style="flex:1;padding:8px;border:none;border-radius:8px;background:#F2F4F7;color:#3C4250;font-size:13px;cursor:pointer">⛨ Proof rail{{ proofBadge }}</button>
+  </div>
+
+  <div id="qg-grid">
+
+    <aside class="qg-panel qg-schema {{ schemaOpenCls }}" style="width:{{ leftW }}px;flex:0 0 auto;background:#F6F7F9;padding:16px 13px;position:relative;z-index:5">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.08em;color:#8B919B">SCHEMA</div>
+        <div class="qg-mono" style="font-size:10.5px;color:#ABB0B8">5 tables</div>
+      </div>
+      <sc-for list="{{ tables }}" as="t" hint-placeholder-count="5">
+        <div style="margin-bottom:3px">
+          <button onClick="{{ t.toggle }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 9px;border:none;border-radius:8px;background:{{ t.bg }};cursor:pointer;text-align:left">
+            <span style="color:#2F6FED;font-size:12px">⛁</span>
+            <span class="qg-mono" style="flex:1;font-size:12.5px;color:#272B33;font-weight:500">{{ t.name }}</span>
+            <span class="qg-mono" style="font-size:10.5px;color:#9AA0AA">{{ t.est }}</span>
+            <span style="color:#9AA0AA;font-size:10px">{{ t.caret }}</span>
+          </button>
+          <sc-if value="{{ t.open }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:3px 4px 8px 16px;display:flex;flex-direction:column;gap:1px">
+              <sc-for list="{{ t.cols }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:5px">
+                  <span style="width:5px;height:5px;border-radius:50%;background:{{ c.dot }};flex:0 0 auto"></span>
+                  <span class="qg-mono" style="font-size:11.5px;color:{{ c.nameColor }}">{{ c.n }}</span>
+                  <span class="qg-mono" style="font-size:10.5px;color:#9AA0AA">{{ c.t }}</span>
+                  <span style="flex:1"></span>
+                  <span class="qg-mono" style="font-size:10px;color:{{ c.badgeColor }}">{{ c.badge }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <div style="margin-top:16px;padding:12px;border-radius:11px;background:{{ redactBg }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#272B33">Redact PHI columns</div>
+            <div class="qg-mono" style="font-size:10px;color:#9AA0AA;margin-top:2px">patients.name · patients.dob → ***</div>
+          </div>
+          <button onClick="{{ toggleRedaction }}" role="switch" aria-checked="{{ redactionOn }}" style="flex:0 0 auto;width:42px;height:24px;border-radius:999px;border:none;background:{{ redactTrack }};position:relative;cursor:pointer;transition:.2s">
+            <span style="position:absolute;top:2px;left:{{ redactKnobX }};width:18px;height:18px;border-radius:50%;background:#FFFFFF;transition:left .2s;box-shadow:0 1px 2px rgba(17,24,39,.25)"></span>
+          </button>
+        </div>
+        <sc-if value="{{ redactionOn }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:9px;font-size:10.5px;color:#7C3AED">● Redaction active — masked in results &amp; logged</div>
+        </sc-if>
+      </div>
+    </aside>
+
+    <div class="qg-resizer" onPointerDown="{{ startLeft }}"></div>
+
+    <main class="qg-panel" style="flex:1;display:flex;flex-direction:column;background:#FFFFFF;min-width:0">
+      <div style="flex:1;overflow:auto;padding:clamp(16px,2.6vw,38px)">
+        <div style="max-width:740px;margin:0 auto">
+
+          <sc-if value="{{ empty }}" hint-placeholder-val="{{ true }}">
+            <div style="min-height:56vh;display:flex;flex-direction:column;justify-content:center">
+              <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(140deg,#2F6FED,#0E9384);margin-bottom:20px"></div>
+              <h1 style="font-size:clamp(23px,1.2rem+.9vw,32px);font-weight:600;letter-spacing:-.02em;margin:0 0 11px;line-height:1.18;color:#16181D">Ask plain-English questions over a read-only database.</h1>
+              <p style="font-size:clamp(15px,.95rem+.2vw,17px);color:#5A626E;margin:0 0 28px;line-height:1.6;max-width:58ch">Every answer is cited back to the exact SQL and row count that produced it. Nothing can be changed — writes are refused at the boundary, by construction.</p>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:#9AA0AA;margin-bottom:11px">TRY ONE</div>
+              <div style="display:flex;flex-direction:column;gap:7px;max-width:520px">
+                <sc-for list="{{ suggested }}" as="s" hint-placeholder-count="3">
+                  <button onClick="{{ s.run }}" style="display:flex;align-items:center;gap:11px;padding:13px 15px;border:none;border-radius:11px;background:{{ s.bg }};color:{{ s.color }};font-size:14px;cursor:pointer;text-align:left;transition:background .14s" style-hover="{{ s.bgHover }}">
+                    <span style="font-size:14px">{{ s.icon }}</span>
+                    <span style="flex:1">{{ s.label }}</span>
+                    <span style="color:#9AA0AA">→</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-for list="{{ messages }}" as="m" hint-placeholder-count="0">
+            <div style="margin-bottom:24px">
+
+              <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;justify-content:flex-end">
+                  <div style="max-width:80%;padding:11px 15px;border-radius:14px 14px 4px 14px;background:#EDF2FE;color:#1E2A4A;font-size:15px;line-height:1.5">{{ m.text }}</div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ m.isAgent }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                    <div style="width:18px;height:18px;border-radius:5px;background:linear-gradient(140deg,#2F6FED,#0E9384)"></div>
+                    <span class="qg-mono" style="font-size:11.5px;color:#8B919B">querygate</span>
+                    <span style="padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:600;background:{{ m.badgeBg }};color:{{ m.badgeColor }}">{{ m.badge }}</span>
+                  </div>
+
+                  <sc-if value="{{ m.isAnswer }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size:clamp(15px,.95rem+.2vw,16px);line-height:1.66;color:#2B303A">{{ m.prose }}</div>
+                    <div style="margin-top:14px;border-radius:12px;background:#F6F7F9;overflow:hidden">
+                      <div style="display:flex;align-items:center;gap:7px;padding:9px 13px">
+                        <span style="font-size:10px;font-weight:600;letter-spacing:.07em;color:#9AA0AA">CITATION · SQL</span>
+                        <span style="flex:1"></span>
+                        <button onClick="{{ m.toggleRows }}" class="qg-mono" style="font-size:10.5px;color:#2F6FED;background:none;border:none;cursor:pointer">{{ m.rowsToggleLabel }}</button>
+                      </div>
+                      <pre class="qg-mono" style="margin:0;padding:12px 14px;font-size:12.5px;line-height:1.55;color:#384150;white-space:pre-wrap;overflow-x:auto;background:#ECEEF2">{{ m.sql }}</pre>
+                      <div class="qg-mono" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:9px 13px;font-size:11px;color:#6A727E">
+                        <span style="color:#047857">{{ m.rowCount }} rows</span>
+                        <span style="color:#C6CCD4">·</span><span>{{ m.totalLabel }}</span>
+                        <span style="color:#C6CCD4">·</span><span>{{ m.elapsed }} ms</span>
+                        <span style="color:#C6CCD4">·</span><span>LIMIT {{ m.limit }}</span>
+                        <sc-if value="{{ m.masked }}" hint-placeholder-val="{{ true }}"><span style="color:#C6CCD4">·</span><span style="color:#7C3AED">{{ m.maskedLabel }}</span></sc-if>
+                      </div>
+                      <sc-if value="{{ m.rowsOpen }}" hint-placeholder-val="{{ true }}">
+                        <div style="overflow-x:auto;max-height:240px;overflow-y:auto;background:#ECEEF2">
+                          <table class="qg-mono" style="border-collapse:collapse;width:100%;font-size:11.5px">
+                            <thead><tr>
+                              <sc-for list="{{ m.columns }}" as="col" hint-placeholder-count="4">
+                                <th style="text-align:left;padding:7px 12px;color:#8B919B;font-weight:600;background:#E4E7EC;position:sticky;top:0">{{ col }}</th>
+                              </sc-for>
+                            </tr></thead>
+                            <tbody>
+                              <sc-for list="{{ m.rowsView }}" as="row" hint-placeholder-count="3">
+                                <tr>
+                                  <sc-for list="{{ row }}" as="cell" hint-placeholder-count="4">
+                                    <td style="padding:6px 12px;color:{{ cell.color }}">{{ cell.v }}</td>
+                                  </sc-for>
+                                </tr>
+                              </sc-for>
+                            </tbody>
+                          </table>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ m.isRefusal }}" hint-placeholder-val="{{ true }}">
+                    <div style="border-radius:14px;background:#E7F8F2;padding:17px 19px">
+                      <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+                        <span style="font-size:18px">🛡</span>
+                        <span style="font-size:clamp(16px,1rem+.4vw,19px);font-weight:600;color:#0B7A6E;letter-spacing:-.01em">Held at the boundary</span>
+                      </div>
+                      <div style="font-size:14.5px;line-height:1.6;color:#2C5F58">This request would change data, and QueryGate is read-only by construction. {{ m.prose }}</div>
+                      <div class="qg-mono" style="margin-top:11px;padding:9px 12px;border-radius:8px;background:#D6F2EB;font-size:11.5px;color:#0B6157">rejected · {{ m.reason }}</div>
+                      <button onClick="{{ seeHow }}" style="margin-top:13px;padding:9px 15px;border:none;border-radius:8px;background:#0E9384;color:#FFFFFF;font-size:13px;font-weight:500;cursor:pointer">See how it was stopped →</button>
+                    </div>
+                  </sc-if>
+
+                </div>
+              </sc-if>
+
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ running }}" hint-placeholder-val="{{ true }}">
+            <div class="qg-mono" style="display:flex;align-items:center;gap:9px;color:#8B919B;font-size:12.5px;padding:4px 0;animation:qgPulse 1.2s infinite">
+              <span style="width:7px;height:7px;border-radius:50%;background:#2F6FED"></span>{{ statusLine }}
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+
+      <div style="flex:0 0 auto;background:#FFFFFF;box-shadow:0 -1px 0 rgba(17,24,39,.07);padding:13px clamp(12px,2.2vw,26px)">
+        <div style="max-width:740px;margin:0 auto">
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+            <sc-for list="{{ suggested }}" as="s" hint-placeholder-count="3">
+              <button onClick="{{ s.run }}" class="qg-hide-sm" style="padding:6px 12px;border:none;border-radius:999px;background:{{ s.chipBg }};color:{{ s.chipColor }};font-size:11.5px;cursor:pointer;white-space:nowrap">{{ s.icon }} {{ s.short }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:9px;align-items:flex-end">
+            <input value="{{ draft }}" onInput="{{ onDraft }}" onKeyDown="{{ onKey }}" placeholder="Ask about the data…" style="flex:1;padding:13px 15px;border:none;border-radius:12px;background:#F2F4F7;color:#16181D;font-size:14.5px"/>
+            <button onClick="{{ send }}" aria-label="Send" style="flex:0 0 auto;width:46px;height:46px;border-radius:12px;border:none;background:{{ sendBg }};color:#fff;font-size:17px;cursor:{{ sendCursor }};transition:background .14s">▷</button>
+          </div>
+          <div style="margin-top:8px;font-size:10.5px;color:#ABB0B8;text-align:center">Synthetic EHR/claims data · not a real service · not a HIPAA certification</div>
+        </div>
+      </div>
+    </main>
+
+    <div class="qg-resizer" onPointerDown="{{ startRight }}"></div>
+
+    <aside class="qg-panel qg-proof {{ proofOpenCls }}" style="width:{{ rightW }}px;flex:0 0 auto;background:#F6F7F9;display:flex;flex-direction:column;position:relative;z-index:5">
+      <div style="flex:0 0 auto;display:flex;gap:2px;padding:9px 9px 0;box-shadow:0 1px 0 rgba(17,24,39,.07)">
+        <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+          <button onClick="{{ tb.go }}" style="position:relative;padding:9px 11px;border:none;background:none;color:{{ tb.color }};font-size:12px;font-weight:{{ tb.weight }};cursor:pointer;border-bottom:2px solid {{ tb.underline }}">
+            {{ tb.label }}<sc-if value="{{ tb.dot }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:6px;right:3px;width:5px;height:5px;border-radius:50%;background:#2F6FED"></span></sc-if>
+          </button>
+        </sc-for>
+      </div>
+      <div style="flex:1;overflow:auto;padding:15px 14px">
+        <sc-if value="{{ tabTrace }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">TOOL TRACE</div>
+          <sc-if value="{{ traceEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:26px 8px;text-align:center;color:#ABB0B8;font-size:12.5px">Waiting for the agent…</div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ trace }}" as="s" hint-placeholder-count="0">
+              <div style="border-radius:10px;background:#FFFFFF;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 11px">
+                  <span class="qg-mono" style="font-size:10px;color:#ABB0B8">{{ s.idx }}</span>
+                  <span style="width:7px;height:7px;border-radius:50%;background:{{ s.color }};flex:0 0 auto"></span>
+                  <span class="qg-mono" style="font-size:12px;color:#272B33">{{ s.tool }}</span>
+                  <span class="qg-mono" style="font-size:11px;color:#9AA0AA">{{ s.argText }}</span>
+                  <span style="flex:1"></span>
+                  <span class="qg-mono" style="font-size:10.5px;color:{{ s.color }}">{{ s.statusLabel }}</span>
+                  <span class="qg-mono" style="font-size:10px;color:#ABB0B8">{{ s.latency }}</span>
+                </div>
+                <sc-if value="{{ s.sql }}" hint-placeholder-val="{{ true }}">
+                  <pre class="qg-mono" style="margin:0;padding:0 11px 9px;font-size:10.5px;line-height:1.45;color:#6A727E;white-space:pre-wrap;max-height:74px;overflow:hidden">{{ s.sql }}</pre>
+                </sc-if>
+                <sc-if value="{{ s.hasReceipt }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;gap:12px;padding:8px 12px;background:#F2F4F7">
+                    <sc-for list="{{ s.receipt }}" as="r" hint-placeholder-count="3">
+                      <span class="qg-mono" style="font-size:10px;color:{{ r.c }}">{{ r.m }} {{ r.l }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ s.reason }}" hint-placeholder-val="{{ true }}">
+                  <div class="qg-mono" style="padding:8px 12px;background:#E7F8F2;font-size:10.5px;color:#0B7A6E">{{ s.reason }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabBoundary }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:7px">READ-ONLY BOUNDARY · DEFENSE IN DEPTH</div>
+          <div class="qg-mono" style="font-size:10.5px;color:#6A727E;margin-bottom:13px">{{ boundary.headline }}</div>
+          <div style="position:relative;border-radius:13px;padding:15px;background:#EAEFFC">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">
+              <span class="qg-mono" style="font-size:10px;color:#3D52CC">L1 · SQL guard (sqlglot, whole-AST + denylist)</span>
+              <span style="flex:1"></span><span style="font-size:13px;color:{{ boundary.l1c }}">{{ boundary.l1m }}</span>
+            </div>
+            <div style="border-radius:11px;padding:14px;background:#E2F0F9">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">
+                <span class="qg-mono" style="font-size:10px;color:#0E72A8">L2 · READ ONLY txn · statement_timeout 5s</span>
+                <span style="flex:1"></span><span style="font-size:13px;color:{{ boundary.l2c }};opacity:{{ boundary.l2o }}">{{ boundary.l2m }}</span>
+              </div>
+              <div style="border-radius:10px;padding:13px;background:#DEF3ED">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">
+                  <span class="qg-mono" style="font-size:10px;color:#0B7A6E">L3 · SELECT-only role (no write grant)</span>
+                  <span style="flex:1"></span><span style="font-size:13px;color:{{ boundary.l3c }};opacity:{{ boundary.l3o }}">{{ boundary.l3m }}</span>
+                </div>
+                <div style="text-align:center;padding:9px;border-radius:8px;background:#FFFFFF;color:#6A727E;font-size:11px" class="qg-mono">▼ PostgreSQL</div>
+              </div>
+            </div>
+            <sc-if value="{{ boundary.active }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute;top:52px;width:12px;height:12px;border-radius:50%;background:{{ boundary.tokenColor }};box-shadow:0 0 12px 2px {{ boundary.tokenColor }};animation:{{ boundary.tokenAnim }}"></div>
+            </sc-if>
+          </div>
+          <div style="margin-top:13px;padding:12px 13px;border-radius:11px;background:{{ boundary.footBg }}">
+            <div style="font-size:12.5px;font-weight:600;color:{{ boundary.footColor }}">{{ boundary.footTitle }}</div>
+            <sc-if value="{{ boundary.reason }}" hint-placeholder-val="{{ true }}">
+              <div class="qg-mono" style="font-size:10.5px;color:#0B6157;margin-top:5px">{{ boundary.reason }}</div>
+            </sc-if>
+          </div>
+          <div style="margin-top:11px;font-size:11px;line-height:1.55;color:#6A727E">A poisoned row can at worst trigger another <span style="color:#3C4250">read-only</span> SELECT — prompt-injection-via-data is contained by the boundary itself.</div>
+        </sc-if>
+
+        <sc-if value="{{ tabAudit }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
+            <span style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA">AUDIT LOG</span>
+            <span class="qg-mono" style="font-size:10px;color:#ABB0B8">audit.jsonl</span>
+            <span style="flex:1"></span>
+            <span class="qg-mono" style="font-size:10.5px;color:#15803D">{{ auditOk }} ok</span>
+            <span class="qg-mono" style="font-size:10.5px;color:#0B7A6E">{{ auditRej }} ✋</span>
+          </div>
+          <sc-if value="{{ auditEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:26px 8px;text-align:center;color:#ABB0B8;font-size:12.5px">No tool calls yet.</div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ audit }}" as="a" hint-placeholder-count="0">
+              <div style="display:flex;gap:9px;align-items:flex-start;background:#FFFFFF;border-radius:9px;padding:9px 11px">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ a.edge }};flex:0 0 auto;margin-top:5px"></span>
+                <span class="qg-mono" style="font-size:10.5px;line-height:1.5;color:#525A66;word-break:break-all">{{ a.json }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:11px;font-size:10.5px;color:#6A727E;line-height:1.5">A rejected write is a first-class audit event — the log is where you prove, after the fact, that the boundary held.</div>
+        </sc-if>
+
+        <sc-if value="{{ tabEval }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">DETERMINISTIC · CI-GATED · NO API KEY</div>
+          <div style="border-radius:11px;background:#ECFBF1;padding:13px;margin-bottom:15px">
+            <div style="font-size:12.5px;font-weight:600;color:#15803D;margin-bottom:10px">Write rejected at each layer, independently</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ evalChecks }}" as="c" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#4B5563"><span style="color:{{ c.color }}">{{ c.mark }}</span>{{ c.label }}</div>
+              </sc-for>
+            </div>
+            <div class="qg-mono" style="margin-top:11px;padding-top:10px;box-shadow:0 -1px 0 rgba(21,128,61,.15);font-size:11px;color:#15803D">0 writes executable · proven, not promised</div>
+          </div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">DISTRIBUTIONAL · OPUS 4.8 · N=3 · MEAN ± SPREAD</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ evalMetrics }}" as="m" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:5px">
+                  <span style="font-size:12px;color:#4B5563;flex:1">{{ m.label }}</span>
+                  <span class="qg-mono" style="font-size:12.5px;color:{{ m.color }};font-weight:600">{{ m.value }}</span>
+                  <span class="qg-mono" style="font-size:10.5px;color:#9AA0AA">{{ m.spread }}</span>
+                </div>
+                <div style="height:6px;border-radius:3px;background:#E4E7EC;overflow:hidden"><div style="height:100%;width:{{ m.bar }};background:{{ m.color }};border-radius:3px"></div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="qg-mono" style="margin-top:15px;padding:11px;border-radius:9px;background:#FFFFFF;font-size:10.5px;line-height:1.55;color:#6A727E">“0 writes executed (deterministic, CI-gated); grounded-rate 0.9x on a frozen 22-q set, reported distributionally.” — never “answers everything.”</div>
+        </sc-if>
+      </div>
+    </aside>
+
+  </div>
+
+  <div class="qg-backdrop {{ backdropCls }}" onClick="{{ closeDrawers }}"></div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+const OVERDUE_SQL = `SELECT p.provider_id, p.name, p.specialty, count(*) AS overdue
+FROM follow_ups f
+JOIN encounters e ON e.patient_id = f.patient_id
+JOIN providers  p ON p.provider_id = e.provider_id
+WHERE f.completed_at IS NULL AND f.due_date < now()
+GROUP BY p.provider_id, p.name, p.specialty
+ORDER BY overdue DESC`;
+const SEARCH_SQL = `SELECT pt.patient_id, pt.name, count(*) AS outstanding
+FROM follow_ups f JOIN patients pt ON pt.patient_id = f.patient_id
+WHERE pt.name ILIKE 'Sarah Lee' AND f.completed_at IS NULL
+GROUP BY pt.patient_id, pt.name`;
+const DELETE_SQL = "DELETE FROM patients WHERE name LIKE 'Smith%'";
+
+class Component extends DCLogic {
+  state = {
+    draft: '', messages: [], trace: [], audit: [], tab: 'trace',
+    expanded: { patients:true, providers:false, encounters:false, claims:false, follow_ups:true },
+    activeTable: null, redactionOn: false,
+    model: 'claude-opus-4-8', transport: 'stdio', running: false, cost: 0,
+    boundary: { active:false, mode:'idle', l1:'idle', l2:'idle', l3:'idle', sql:'', reason:'' },
+    statusLine: '', openRows: {}, schemaOpen:false, proofOpen:false,
+    leftW: 252, rightW: 388,
+  };
+  timers = []; uid = 0;
+  componentWillUnmount(){ this.timers.forEach(clearTimeout); }
+  after(ms, fn){ const t=setTimeout(fn, ms); this.timers.push(t); return t; }
+
+  startResize(side, e){
+    e.preventDefault();
+    const startX = e.clientX;
+    const startLeft = this.state.leftW, startRight = this.state.rightW;
+    const move = (ev)=>{
+      if(side==='left'){
+        let w = startLeft + (ev.clientX - startX);
+        w = Math.max(190, Math.min(440, w));
+        this.setState({leftW:w});
+      } else {
+        let w = startRight - (ev.clientX - startX);
+        w = Math.max(300, Math.min(560, w));
+        this.setState({rightW:w});
+      }
+    };
+    const up = ()=>{
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.style.userSelect=''; document.body.style.cursor='';
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    document.body.style.userSelect='none'; document.body.style.cursor='col-resize';
+  }
+
+  schema(){ return [
+    {name:'patients', est:'~500', cols:[
+      {n:'patient_id',t:'int',pk:true},{n:'name',t:'text',phi:true},{n:'dob',t:'date',phi:true},
+      {n:'sex',t:'text'},{n:'city',t:'text'},{n:'registered_at',t:'timestamptz'},{n:'last_contacted_at',t:'timestamptz',nul:true}]},
+    {name:'providers', est:'~50', cols:[
+      {n:'provider_id',t:'int',pk:true},{n:'name',t:'text'},{n:'specialty',t:'text'},{n:'npi',t:'text'}]},
+    {name:'encounters', est:'~3–5k', cols:[
+      {n:'encounter_id',t:'int',pk:true},{n:'patient_id',t:'int',fk:'patients.patient_id'},
+      {n:'provider_id',t:'int',fk:'providers.provider_id'},{n:'date',t:'date'},{n:'type',t:'text'},{n:'status',t:'text'}]},
+    {name:'claims', est:'~4k', cols:[
+      {n:'claim_id',t:'int',pk:true},{n:'encounter_id',t:'int',fk:'encounters.encounter_id'},
+      {n:'amount',t:'numeric'},{n:'status',t:'text'},{n:'submitted_at',t:'timestamptz'},{n:'paid_at',t:'timestamptz',nul:true}]},
+    {name:'follow_ups', est:'~480', cols:[
+      {n:'follow_up_id',t:'int',pk:true},{n:'patient_id',t:'int',fk:'patients.patient_id'},
+      {n:'due_date',t:'date'},{n:'completed_at',t:'timestamptz',nul:true}]},
+  ]; }
+
+  scenarios(){ return {
+    overdue: {
+      table:'follow_ups',
+      steps:[
+        {tool:'list_tables', args:{}, status:'ok', latency:2, dur:520, rowCount:5},
+        {tool:'describe_table', args:{table:'follow_ups'}, status:'ok', latency:4, dur:620, rowCount:null},
+        {tool:'run_select', args:{sql:OVERDUE_SQL}, status:'ok', latency:41, dur:900, rowCount:7,
+          boundary:{mode:'pass',l1:'pass',l2:'pass',l3:'pass'}},
+      ],
+      cost:0.0041, kind:'answer',
+      prose:'Dr. Alice Okafor (cardiology) leads with 38 patients overdue for follow-up, ahead of Dr. Marcus Reyes (31) and Dr. Priya Nair (24). Across all 7 providers with overdue patients, 142 follow-ups are past due.',
+      citation:{ sql:OVERDUE_SQL, columns:['provider_id','name','specialty','overdue'],
+        rows:[[201,'Dr. Alice Okafor','cardiology',38],[118,'Dr. Marcus Reyes','internal medicine',31],
+        [145,'Dr. Priya Nair','endocrinology',24],[160,'Dr. Tom Becker','oncology',19],
+        [133,'Dr. Lena Cho','cardiology',14],[127,'Dr. Sam Patel','family medicine',9],
+        [152,'Dr. Iris Wong','neurology',7]],
+        rowCount:7, total:142, elapsed:41, limit:1000, truncated:false, phiCols:[] },
+    },
+    search: {
+      table:'patients',
+      steps:[
+        {tool:'list_tables', args:{}, status:'ok', latency:2, dur:480, rowCount:5},
+        {tool:'search_text', args:{term:'Sara Lee', table:'patients'}, status:'ok', latency:6, dur:640, rowCount:1, phi:true,
+          boundary:{mode:'pass',l1:'pass',l2:'pass',l3:'pass'}},
+        {tool:'run_select', args:{sql:SEARCH_SQL}, status:'ok', latency:8, dur:700, rowCount:1, phi:true,
+          boundary:{mode:'pass',l1:'pass',l2:'pass',l3:'pass'}},
+      ],
+      cost:0.0033, kind:'answer',
+      prose:'I found one close match for “Sara Lee” — patient_id 207, “Sarah Lee”. She has 3 follow-ups still outstanding.',
+      citation:{ sql:SEARCH_SQL, columns:['patient_id','name','outstanding'],
+        rows:[[207,'Sarah Lee',3]], rowCount:1, total:1, elapsed:8, limit:1000, truncated:false, phiCols:['name'] },
+    },
+    refusal: {
+      table:'patients',
+      steps:[
+        {tool:'run_select', args:{sql:DELETE_SQL}, status:'rejected', latency:1, dur:760,
+          error:'Only a single read-only SELECT is permitted.',
+          boundary:{mode:'reject',l1:'reject',l2:'ghost',l3:'ghost', reason:'Write statement (DELETE) found in AST.'}},
+      ],
+      cost:0.0009, kind:'refusal',
+      reason:'Only a single read-only SELECT is permitted.',
+      prose:'I won’t attempt that.',
+    },
+  }; }
+
+  pick(text){
+    const t=(text||'').toLowerCase();
+    if(/\b(delete|drop|truncate|update|insert|remove|wipe|erase|mark all)\b/.test(t)) return 'refusal';
+    if(/\b(sara|sarah|spell|search|find .* named|fuzzy)\b/.test(t)) return 'search';
+    return 'overdue';
+  }
+
+  send(){ const t=this.state.draft.trim(); if(!t||this.state.running) return; this.setState({draft:''}); this.ask(t); }
+  ask(text){
+    if(this.state.running) return;
+    const sc = this.scenarios()[this.pick(text)];
+    const id = ++this.uid;
+    this.setState(s=>({ messages: s.messages.concat([{id, role:'user', text}]),
+      running:true, trace:[], tab:'trace', proofOpen:true, schemaOpen:false,
+      boundary:{active:false,mode:'idle',l1:'idle',l2:'idle',l3:'idle',sql:'',reason:''},
+      statusLine:'connecting · reading server instructions…' }));
+    this.run(sc);
+  }
+
+  run(sc){
+    let delay = 420;
+    const labels = {list_tables:'discovering schema…', describe_table:'inspecting '+sc.table+'…',
+      run_select:'running query…', search_text:'fuzzy-searching text columns…'};
+    sc.steps.forEach((step)=>{
+      this.after(delay, ()=>{
+        this.setState(s=>({ trace: s.trace.concat([{...step, status:'running'}]), statusLine: labels[step.tool]||'working…' }));
+      });
+      this.after(delay+step.dur, ()=> this.resolve(step));
+      delay += step.dur + 320;
+    });
+    this.after(delay+200, ()=> this.finish(sc));
+  }
+
+  resolve(step){
+    this.setState(s=>{
+      const trace = s.trace.slice();
+      const i = trace.length-1;
+      if(i>=0) trace[i] = {...trace[i], status:step.status, latency:step.latency};
+      const a = { ts:new Date().toISOString(), tool:step.tool, args:step.args,
+        row_count: (step.rowCount===undefined?null:step.rowCount), latency_ms:step.latency, status:step.status };
+      if(step.error) a.error = step.error;
+      a.redactions = (s.redactionOn && step.phi) ? ['patients.name'] : [];
+      const audit = s.audit.concat([a]);
+      let boundary = s.boundary, tab = s.tab;
+      if(step.boundary){
+        boundary = { active:true, sql: step.args.sql||'', reason: step.boundary.reason||'',
+          mode:step.boundary.mode, l1:step.boundary.l1, l2:step.boundary.l2, l3:step.boundary.l3 };
+        if(step.boundary.mode==='reject') tab='boundary';
+      }
+      return { trace, audit, boundary, tab };
+    });
+  }
+
+  finish(sc){
+    const id = ++this.uid;
+    const msg = { id, role:'agent', kind:sc.kind, prose:sc.prose };
+    if(sc.kind==='answer') msg.citation = sc.citation;
+    if(sc.kind==='refusal') msg.reason = sc.reason;
+    this.setState(s=>({ messages: s.messages.concat([msg]), running:false, statusLine:'', cost: s.cost + sc.cost }));
+  }
+
+  toggleRows(id){ this.setState(s=>({ openRows:{...s.openRows, [id]: !s.openRows[id]} })); }
+  toggleTable(name){ this.setState(s=>({ expanded:{...s.expanded, [name]: !s.expanded[name]} })); }
+  toggleRedaction(){ this.setState(s=>({ redactionOn: !s.redactionOn })); }
+  setTab(t){ this.setState({tab:t}); }
+  cycleModel(){ this.setState(s=>({ model: s.model==='claude-opus-4-8'?'claude-sonnet-4-6':'claude-opus-4-8' })); }
+  cycleTransport(){ this.setState(s=>({ transport: s.transport==='stdio'?'http connector':'stdio' })); }
+  toggleSchema(){ this.setState(s=>({ schemaOpen:!s.schemaOpen, proofOpen:false })); }
+  toggleProof(){ this.setState(s=>({ proofOpen:!s.proofOpen, schemaOpen:false })); }
+  closeDrawers(){ this.setState({ schemaOpen:false, proofOpen:false }); }
+
+  renderVals(){
+    const st = this.state;
+    const mode = st.boundary.mode;
+    const tables = this.schema().map(t=>{
+      const open = !!st.expanded[t.name];
+      const active = st.activeTable===t.name;
+      return { name:t.name, est:t.est, open, caret: open?'▾':'▸',
+        bg: (open||active)?'#FFFFFF':'transparent',
+        toggle: ()=>this.toggleTable(t.name),
+        cols: t.cols.map(c=>{
+          const isPhi = !!c.phi;
+          const masked = isPhi && st.redactionOn;
+          let badge='', badgeColor='#9AA0AA';
+          if(c.pk){ badge='PK'; badgeColor='#2F6FED'; }
+          else if(c.fk){ badge='→ '+c.fk; badgeColor='#7585A8'; }
+          else if(c.nul){ badge='nullable'; badgeColor='#ABB0B8'; }
+          return { n:c.n, t:c.t, badge, badgeColor,
+            dot: masked?'#7C3AED':(c.pk?'#2F6FED':'#CCD1D9'),
+            nameColor: masked?'#7C3AED':'#3C4250' };
+        }) };
+    });
+    const messages = st.messages.map(m=>{
+      if(m.role==='user') return { id:m.id, isUser:true, isAgent:false, text:m.text };
+      const isAnswer = m.kind==='answer', isRefusal = m.kind==='refusal';
+      const vm = { id:m.id, isUser:false, isAgent:true, isAnswer, isRefusal, prose:m.prose,
+        badge: isRefusal?'🛡 held':'grounded ✓',
+        badgeBg: isRefusal?'#E7F8F2':'#ECFDF3', badgeColor: isRefusal?'#0B7A6E':'#047857' };
+      if(isRefusal) vm.reason = m.reason;
+      if(isAnswer){
+        const c=m.citation, phi=c.phiCols||[];
+        const anyMask = st.redactionOn && phi.length>0;
+        const rowsView = c.rows.map(r=> r.map((cell,ci)=>{
+          const masked = st.redactionOn && phi.includes(c.columns[ci]);
+          return { v: masked?'***':cell, color: masked?'#7C3AED':'#384150' };
+        }));
+        const rowsOpen = !!st.openRows[m.id];
+        Object.assign(vm, { sql:c.sql, columns:c.columns, rowsView, rowCount:c.rowCount,
+          totalLabel: c.total+' total', elapsed:c.elapsed, limit:c.limit,
+          masked:anyMask, maskedLabel:'redacted: '+phi.length+' col',
+          rowsOpen, rowsToggleLabel: rowsOpen?'▾ hide rows':'▸ view rows',
+          toggleRows: ()=>this.toggleRows(m.id) });
+      }
+      return vm;
+    });
+    const mk=(label,short,prompt,icon,danger)=>({label,short,prompt,icon,
+      run:()=>this.ask(prompt),
+      bg: danger?'#FBF4E9':'#F6F7F9',
+      bgHover: danger?'background:#F6ECDB':'background:#EEF0F4',
+      color: danger?'#B45309':'#3C4250',
+      chipBg: danger?'#FBF4E9':'#F2F4F7',
+      chipColor: danger?'#B45309':'#5A626E'});
+    const suggested = [
+      mk('Which providers have the most patients overdue for follow-up?','overdue by provider','Which providers have the most patients overdue for follow-up?','◷'),
+      mk('How many follow-ups does Sara Lee have outstanding?','fuzzy name lookup','How many follow-ups does Sara Lee have outstanding?','⌕'),
+      mk('Delete all patients named Smith.','delete the Smith patients','Delete all patients named Smith.','🛡',true),
+    ];
+    const tabDefs=[['trace','Trace'],['boundary','Boundary'],['audit','Audit'],['eval','Eval / CI']];
+    const tabs = tabDefs.map(([k,l])=>({ label:l, go:()=>this.setTab(k),
+      color: st.tab===k?'#16181D':'#8B919B', weight: st.tab===k?'600':'500',
+      underline: st.tab===k?'#2F6FED':'transparent',
+      dot: (k==='boundary'&&mode==='reject'&&st.tab!=='boundary') }));
+    const transportDot = st.transport==='stdio' ? (st.running?'#2F6FED':'#9AA0AA') : '#0E9384';
+    return {
+      draft:st.draft, model:st.model, transport:st.transport, transportDot,
+      costStr:'$'+st.cost.toFixed(4), running:st.running, statusLine:st.statusLine,
+      empty: st.messages.length===0, suggested, tables, messages, tabs,
+      leftW: st.leftW, rightW: st.rightW,
+      startLeft:(e)=>this.startResize('left', e), startRight:(e)=>this.startResize('right', e),
+      redactionOn:st.redactionOn,
+      redactBg: st.redactionOn?'#F3EEFE':'#FFFFFF',
+      redactTrack: st.redactionOn?'#7C3AED':'#CCD1D9', redactKnobX: st.redactionOn?'22px':'2px',
+      schemaOpenCls: st.schemaOpen?'open':'', proofOpenCls: st.proofOpen?'open':'',
+      backdropCls: (st.schemaOpen||st.proofOpen)?'open':'',
+      proofBadge: (mode==='reject')?' ●':'',
+      sendBg: st.draft.trim()?'#2F6FED':'#D2D7DE', sendCursor: st.draft.trim()?'pointer':'default',
+      onDraft:(e)=>this.setState({draft:e.target.value}),
+      onKey:(e)=>{ if(e.key==='Enter'){ e.preventDefault(); this.send(); } },
+      send:()=>this.send(),
+      cycleModel:()=>this.cycleModel(), cycleTransport:()=>this.cycleTransport(),
+      toggleRedaction:()=>this.toggleRedaction(),
+      toggleSchema:()=>this.toggleSchema(), toggleProof:()=>this.toggleProof(),
+      closeDrawers:()=>this.closeDrawers(),
+      seeHow:()=>this.setState({tab:'boundary', proofOpen:true}),
+      tabTrace: st.tab==='trace', tabBoundary: st.tab==='boundary',
+      tabAudit: st.tab==='audit', tabEval: st.tab==='eval',
+      trace: this.traceView(), audit: this.auditView(), boundary: this.boundaryView(),
+      traceEmpty: st.trace.length===0, auditEmpty: st.audit.length===0,
+      auditOk: st.audit.filter(a=>a.status==='ok').length,
+      auditRej: st.audit.filter(a=>a.status==='rejected').length,
+      evalChecks: [
+        {mark:'✓',color:'#15803D',label:'Layer 1 — SQL guard rejects'},
+        {mark:'✓',color:'#0E72A8',label:'Layer 2 — READ ONLY txn rejects'},
+        {mark:'✓',color:'#0B7A6E',label:'Layer 3 — SELECT-only role rejects'},
+        {mark:'✓',color:'#3D52CC',label:'data-modifying CTE (whole-AST walk)'},
+        {mark:'✓',color:'#3D52CC',label:';-chained & SELECT … FOR UPDATE / INTO'},
+        {mark:'✓',color:'#3D52CC',label:'denylisted function (pg_read_file …)'},
+      ],
+      evalMetrics: [
+        {label:'Grounded-rate',value:'0.94',spread:'± 0.03',bar:'94%',color:'#15803D'},
+        {label:'Table-precision',value:'0.97',spread:'± 0.02',bar:'97%',color:'#0E72A8'},
+        {label:'Answer-correctness',value:'0.91',spread:'± 0.05',bar:'91%',color:'#6D28D9'},
+        {label:'0 destructive calls',value:'100%',spread:'deterministic',bar:'100%',color:'#0B7A6E'},
+      ],
+    };
+  }
+
+  traceView(){
+    return this.state.trace.map((s,i)=>{
+      const isRun = s.tool==='run_select'||s.tool==='search_text';
+      const color = s.status==='ok'?'#15803D':s.status==='rejected'?'#0B7A6E':s.status==='error'?'#DC2626':'#2F6FED';
+      const argText = s.tool==='describe_table'?'("'+s.args.table+'")'
+        : s.tool==='search_text'?'("'+s.args.term+'")'
+        : s.tool==='run_select'?'( … )':'()';
+      let receipt=null;
+      if(isRun && s.status!=='running'){
+        if(s.status==='rejected') receipt=[{l:'guard',m:'🛡',c:'#0B7A6E'},{l:'txn',m:'⊘',c:'#C6CCD4'},{l:'role',m:'⊘',c:'#C6CCD4'}];
+        else if(s.status==='ok') receipt=[{l:'guard',m:'✓',c:'#3D52CC'},{l:'txn',m:'✓',c:'#0E72A8'},{l:'role',m:'✓',c:'#0B7A6E'}];
+        else receipt=[{l:'guard',m:'✓',c:'#3D52CC'},{l:'txn',m:'✕',c:'#DC2626'},{l:'role',m:'·',c:'#C6CCD4'}];
+      }
+      return { idx:i+1, tool:s.tool, argText, color, running:s.status==='running',
+        statusLabel: s.status==='running'?'running…':s.status,
+        latency: s.latency!=null?(s.latency+'ms'):'', sql: s.args.sql||null,
+        isRun, hasReceipt: !!receipt, receipt: receipt||[], reason: s.error||null };
+    });
+  }
+  auditView(){
+    return this.state.audit.map(a=>{
+      const edge = a.status==='ok'?'#15803D':a.status==='rejected'?'#0B7A6E':'#DC2626';
+      return { edge, json: JSON.stringify(a) };
+    });
+  }
+  boundaryView(){
+    const b=this.state.boundary;
+    const band={l1:'#3D52CC',l2:'#0E72A8',l3:'#0B7A6E'};
+    const col=(v,layer)=> v==='pass'?band[layer]:v==='reject'?'#0B7A6E':v==='ghost'?'#C6CCD4':v==='error'?'#DC2626':'#9AA0AA';
+    const mark=(v)=> v==='pass'?'✓':v==='reject'?'🛡':v==='ghost'?'⊘':v==='error'?'✕':'·';
+    const opa=(v)=> v==='ghost'?'.5':'1';
+    let headline, footTitle, footColor, footBg, tokenColor, tokenAnim;
+    if(b.mode==='reject'){
+      headline='L1 ✓ stop · L2 ⊘ · L3 ⊘ → write unreachable';
+      footTitle='🛡 Rejected at Layer 1 — independently provable at Layers 2 & 3';
+      footColor='#0B7A6E'; footBg='#E7F8F2';
+      tokenColor='#0E9384'; tokenAnim='qgSlam .7s cubic-bezier(.2,.8,.1,1) forwards, qgRing .9s .55s ease';
+    } else if(b.mode==='pass'){
+      headline='L1 ✓ · L2 ✓ · L3 ✓ → ran';
+      footTitle='Ran · query executed read-only';
+      footColor='#15803D'; footBg='#ECFBF1';
+      tokenColor='#0E72A8'; tokenAnim='qgTravel 1.05s ease forwards';
+    } else if(b.mode==='error'){
+      headline='reached Postgres · statement_timeout fired';
+      footTitle='Timed out at Layer 2 (statement_timeout 5s)';
+      footColor='#DC2626'; footBg='#FBECEC';
+      tokenColor='#DC2626'; tokenAnim='qgTravel 1s ease forwards';
+    } else {
+      headline='Three independent layers. Any one would mostly hold; together, a write is unreachable.';
+      footTitle='Idle — send a query to watch it travel the boundary';
+      footColor='#6A727E'; footBg='#EEF0F4';
+      tokenColor='#2F6FED'; tokenAnim='none';
+    }
+    return { active:b.active, mode:b.mode, sql:b.sql, reason:b.reason, headline,
+      l1c:col(b.l1,'l1'), l2c:col(b.l2,'l2'), l3c:col(b.l3,'l3'), l1m:mark(b.l1), l2m:mark(b.l2), l3m:mark(b.l3),
+      l2o:opa(b.l2), l3o:opa(b.l3), tokenColor, tokenAnim,
+      footTitle, footColor, footBg };
+  }
+}
+</script>
+</body>
+</html>
