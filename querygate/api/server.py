@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Iterator
 
 import anyio
 from starlette.applications import Starlette
+from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from starlette.routing import Mount, Route
@@ -54,11 +56,24 @@ def _request_config(base: Config, *, redaction: bool) -> Config:
     redact config so the UI's PHI toggle is backed by the real result filter, not a UI trick.
     """
     fd, audit_path = tempfile.mkstemp(prefix="qg_web_audit_", suffix=".jsonl")
-    import os
-
     os.close(fd)
     redact_path = str(DEMO_REDACT) if redaction else None
     return dataclasses.replace(base, audit_path=audit_path, redact_path=redact_path)
+
+
+def _cleanup_audit(path: str | None) -> None:
+    """Delete a per-request audit file once its response has finished streaming.
+
+    Each ``/api/ask`` allocates a fresh temp audit file (:func:`_request_config`) so the adapter can
+    read back exactly this run's lines. Without cleanup those temp files accumulate in ``%TEMP%`` for
+    the life of the (long-running) demo server. Run as a Starlette ``BackgroundTask`` after the
+    response body is sent; best-effort (a missing file / disconnect mid-stream is harmless)."""
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def _error_event(exc: Exception) -> dict:
@@ -120,7 +135,11 @@ def create_app(config: Config | None = None) -> Starlette:
             return JSONResponse({"error": str(exc)}, status_code=503)
 
         events = agent.stream_run(question, config=cfg, model=model)
-        return StreamingResponse(_ndjson_stream(events), media_type="application/x-ndjson")
+        return StreamingResponse(
+            _ndjson_stream(events),
+            media_type="application/x-ndjson",
+            background=BackgroundTask(_cleanup_audit, cfg.audit_path),
+        )
 
     async def eval_route(_: Request) -> JSONResponse:
         return JSONResponse(eval_summary.latest_eval_summary())

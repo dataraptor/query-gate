@@ -502,6 +502,34 @@ def test_ask_requires_question(web_client):
     assert web_client.post("/api/ask", json={}).status_code == 400
 
 
+def test_ask_cleans_up_per_request_audit_file(web_client, monkeypatch):
+    """Each /api/ask allocates a fresh temp audit file (so it reads back only this run's lines); it
+    must be deleted once the response has streamed, or %TEMP% fills up on a long-running demo server.
+    Keyless: the agent loop is stubbed so this asserts the adapter's lifecycle, not the model."""
+    import glob
+    import tempfile
+
+    from querygate.api import server
+
+    captured: dict[str, str] = {}
+
+    def fake_stream_run(question, *, config, model=None):
+        captured["audit_path"] = config.audit_path  # the per-request temp file create_app allocated
+        yield {"type": "message", "message": {"kind": "answer", "prose": "ok", "citation": {}}}
+
+    monkeypatch.setattr(server.agent, "stream_run", fake_stream_run)
+
+    pattern = os.path.join(tempfile.gettempdir(), "qg_web_audit_*.jsonl")
+    before = set(glob.glob(pattern))
+
+    resp = web_client.post("/api/ask", json={"question": "anything"})
+    assert resp.status_code == 200
+
+    assert captured["audit_path"] not in before  # a new per-request file was created...
+    assert not os.path.exists(captured["audit_path"])  # ...and removed by the background task
+    assert set(glob.glob(pattern)) == before  # net zero temp files left behind
+
+
 # ==================================================================================================
 # Mid-stream failure → a terminal error event (not a silent empty stream).
 # A live-loop failure (unset model key, transient API error) raises *after* the 200 stream has begun,

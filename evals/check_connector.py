@@ -116,7 +116,7 @@ def main() -> int:
 
     url = connector_url()
     client = anthropic.Anthropic()
-    print(f"connector → {url}  (model={MODEL}, beta={BETA})")
+    print(f"connector -> {url}  (model={MODEL}, beta={BETA})")
 
     # H-5 — happy path, both halves.
     resp = run_connector(client, url, HAPPY_MESSAGE)
@@ -134,7 +134,7 @@ def main() -> int:
         print("  H-7 UNEXPECTED: missing mcp_toolset did NOT 400", file=sys.stderr)
         return 1
     except anthropic.APIStatusError as exc:
-        print(f"  H-7 missing-mcp_toolset → {exc.status_code} (as documented, App A)")
+        print(f"  H-7 missing-mcp_toolset -> {exc.status_code} (as documented, App A)")
 
     return 0
 

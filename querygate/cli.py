@@ -298,8 +298,28 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _ensure_utf8_io() -> None:
+    """Emit UTF-8 on stdout/stderr so non-ASCII in messages survives a redirect (spec §18 honesty).
+
+    User-facing strings carry non-ASCII (em-dash in guard reasons, the ``--help`` description, an
+    occasional arrow). On Windows, **redirected/piped** stdout is encoded with the locale codepage
+    (cp1252), not the console's UTF-8 — so a captured ``querygate --help`` shows ``QueryGate �`` and a
+    character outside cp1252 would raise ``UnicodeEncodeError``. Reconfiguring to UTF-8 fixes every
+    message in one place (UTF-8 is also what the Windows console and JSON-RPC expect, so the stdio
+    server is unaffected — it writes bytes via ``sys.stdout.buffer``). Best-effort: a stream without
+    ``reconfigure`` (e.g. pytest's capture) is left untouched."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8")
+            except (ValueError, OSError):  # pragma: no cover - defensive (already-detached stream)
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code (0 ok, non-zero on refusal/error)."""
+    _ensure_utf8_io()
     _load_dotenv()
     parser = _build_parser()
     args = parser.parse_args(argv)
