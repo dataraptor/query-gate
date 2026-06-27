@@ -27,27 +27,28 @@ QueryGate makes two kinds of promise and keeps them distinct on purpose.
 
 The whole design fits in one sentence: the model proposes a query, and deterministic code disposes of it and the result. Claude writes SQL via tool use; QueryGate validates it across three layers, runs it read-only, filters the result, logs the call, and hands back a cited answer.
 
-```text
-  Claude / Claude Desktop / the Messages API
-       │  stdio · Streamable HTTP (MCP) · web demo (/api adapter)
-       ▼
-  querygate (MCP server)
+🟦 deterministic (code, the boundary) · 🟨 LLM (distributional, never trusted with safety) · 🟥 rejection path.
+Full component wiring, the request lifecycle, and the two-tier CI are in [`docs/architecture.md`](docs/architecture.md); the threat model is in [`docs/security-model.md`](docs/security-model.md).
 
-  Tools: list_tables · describe_table · run_select · search_text · explain_select
-       │
-       ▼  the read-only boundary
-  Layer 1  SQL guard: one SELECT, whole-AST walk, dangerous-function denylist
-  Layer 2  READ ONLY transaction + statement_timeout
-  Layer 3  least-privilege DB role: SELECT-only, no write grant
-       │
-       ▼
-  result filter: auto-LIMIT · byte cap · redact · JSON-safe serialize
-       │
-       ▼
-  psycopg → PostgreSQL (synthetic EHR/claims)
-       │
-       ▼
-  audit.jsonl ← every tool call (ok / rejected / error)
+```mermaid
+flowchart TB
+    C["Claude Desktop · Claude Code · Messages API · web demo"]
+    C -- "stdio · Streamable HTTP (MCP) · /api adapter" --> SRV["querygate (MCP server)<br/>5 tools, thin wrappers"]
+    SRV --> L1{"Layer 1 — SQL guard<br/>one SELECT · whole-AST walk · denylist"}
+    L1 -- "write / unparsable" --> REJ["🟥 rejected · audited<br/>never reaches the DB"]
+    L1 -- "accept (+ auto-LIMIT)" --> L2["Layer 2 — READ ONLY txn<br/>+ statement_timeout"]
+    L2 --> L3["Layer 3 — least-privilege role<br/>SELECT-only, no write grant"]
+    L3 --> FILT["result filter<br/>serialize · redact · byte-cap"]
+    FILT --> DB[("PostgreSQL<br/>synthetic EHR/claims")]
+    FILT --> OUT(["cited RunResult (sql + row_count)"])
+    SRV -.->|"every call: ok / rejected / error"| AUDIT[["audit.jsonl"]]
+    style L1 fill:#dbeafe,stroke:#1e40af
+    style L2 fill:#dbeafe,stroke:#1e40af
+    style L3 fill:#dbeafe,stroke:#1e40af
+    style FILT fill:#dbeafe,stroke:#1e40af
+    style DB fill:#dbeafe,stroke:#1e40af
+    style REJ fill:#fee2e2,stroke:#b91c1c
+    style AUDIT fill:#f3f4f6,stroke:#6b7280
 ```
 
 **Order matters.** Layers 2 and 3 are the load-bearing guarantees: Postgres enforces them regardless of what the guard misses. Layer 1 is the fast, legible first line that produces clean error messages and the auto-`LIMIT`. This is defense in depth, so a gap in any one layer leaves the system degraded, not breached, because the other two still hold.
@@ -203,5 +204,6 @@ These are scope fences, stated plainly, not hidden gaps. Everything claimed abov
 | [`evals/`](evals/) | The grounding eval harness, the frozen gold set, and the scorer |
 | [`tests/`](tests/) | The Tier-1 suite: boundary, guard, result filter, tools, audit, server, HTTP, CLI, web |
 | [`app/`](app/) | The web demo UI, wired to the live agent loop |
+| [`docs/`](docs/) | [architecture](docs/architecture.md) (wiring, lifecycle, CI), [security-model](docs/security-model.md) (boundary + threat model), [data-model](docs/data-model.md) (the synthetic schema) |
 
 Synthetic EHR/claims data only. Not a real service, and not a HIPAA certification.
