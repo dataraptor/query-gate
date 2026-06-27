@@ -1,0 +1,320 @@
+[
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "list_tables",
+      "args": {},
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "list_tables",
+      "args": {},
+      "status": "ok",
+      "latency": 32,
+      "rowCount": 5,
+      "phi": false
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:48.846609+00:00",
+      "tool": "list_tables",
+      "args": {},
+      "row_count": 5,
+      "latency_ms": 32,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "describe_table",
+      "args": {
+        "table": "follow_ups"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "describe_table",
+      "args": {
+        "table": "follow_ups"
+      },
+      "status": "ok",
+      "latency": 140,
+      "rowCount": 3,
+      "phi": false
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:50.429973+00:00",
+      "tool": "describe_table",
+      "args": {
+        "table": "follow_ups"
+      },
+      "row_count": 3,
+      "latency_ms": 140,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "describe_table",
+      "args": {
+        "table": "patients"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "describe_table",
+      "args": {
+        "table": "patients"
+      },
+      "status": "ok",
+      "latency": 141,
+      "rowCount": 3,
+      "phi": false
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:50.572614+00:00",
+      "tool": "describe_table",
+      "args": {
+        "table": "patients"
+      },
+      "row_count": 3,
+      "latency_ms": 141,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "search_text",
+      "args": {
+        "term": "Sara Lee",
+        "table": "patients"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "search_text",
+      "args": {
+        "term": "Sara Lee",
+        "table": "patients"
+      },
+      "status": "ok",
+      "latency": 78,
+      "rowCount": 0,
+      "phi": false,
+      "boundary": {
+        "mode": "pass",
+        "l1": "pass",
+        "l2": "pass",
+        "l3": "pass"
+      }
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:52.141688+00:00",
+      "tool": "search_text",
+      "args": {
+        "term": "Sara Lee",
+        "table": "patients"
+      },
+      "row_count": 0,
+      "latency_ms": 78,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "search_text",
+      "args": {
+        "term": "Sara",
+        "table": "patients"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "search_text",
+      "args": {
+        "term": "Sara",
+        "table": "patients"
+      },
+      "status": "ok",
+      "latency": 78,
+      "rowCount": 12,
+      "phi": false,
+      "boundary": {
+        "mode": "pass",
+        "l1": "pass",
+        "l2": "pass",
+        "l3": "pass"
+      }
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:53.999712+00:00",
+      "tool": "search_text",
+      "args": {
+        "term": "Sara",
+        "table": "patients"
+      },
+      "row_count": 12,
+      "latency_ms": 78,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "search_text",
+      "args": {
+        "term": "Lee",
+        "table": "patients"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "search_text",
+      "args": {
+        "term": "Lee",
+        "table": "patients"
+      },
+      "status": "ok",
+      "latency": 63,
+      "rowCount": 6,
+      "phi": false,
+      "boundary": {
+        "mode": "pass",
+        "l1": "pass",
+        "l2": "pass",
+        "l3": "pass"
+      }
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:54.078804+00:00",
+      "tool": "search_text",
+      "args": {
+        "term": "Lee",
+        "table": "patients"
+      },
+      "row_count": 6,
+      "latency_ms": 63,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "run_select",
+      "args": {
+        "sql": "SELECT p.patient_id, p.name, COUNT(f.follow_up_id) AS outstanding_follow_ups\nFROM app.patients p\nLEFT JOIN app.follow_ups f\n  ON f.patient_id = p.patient_id\n AND f.completed_at IS NULL\nWHERE p.name = 'Sarah Lee'\nGROUP BY p.patient_id, p.name;"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "run_select",
+      "args": {
+        "sql": "SELECT p.patient_id, p.name, COUNT(f.follow_up_id) AS outstanding_follow_ups\nFROM app.patients p\nLEFT JOIN app.follow_ups f\n  ON f.patient_id = p.patient_id\n AND f.completed_at IS NULL\nWHERE p.name = 'Sarah Lee'\nGROUP BY p.patient_id, p.name;"
+      },
+      "status": "ok",
+      "latency": 15,
+      "rowCount": 1,
+      "phi": false,
+      "boundary": {
+        "mode": "pass",
+        "l1": "pass",
+        "l2": "pass",
+        "l3": "pass"
+      }
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:57.143786+00:00",
+      "tool": "run_select",
+      "args": {
+        "sql": "SELECT p.patient_id, p.name, COUNT(f.follow_up_id) AS outstanding_follow_ups\nFROM app.patients p\nLEFT JOIN app.follow_ups f\n  ON f.patient_id = p.patient_id\n AND f.completed_at IS NULL\nWHERE p.name = 'Sarah Lee'\nGROUP BY p.patient_id, p.name;"
+      },
+      "row_count": 1,
+      "latency_ms": 15,
+      "status": "ok",
+      "redactions": []
+    }
+  },
+  {
+    "type": "message",
+    "message": {
+      "kind": "answer",
+      "prose": "Sarah Lee has **1 outstanding follow-up**.\n\nSource:  \n```sql\nSELECT p.patient_id, p.name, COUNT(f.follow_up_id) AS outstanding_follow_ups\nFROM app.patients p\nLEFT JOIN app.follow_ups f\n  ON f.patient_id = p.patient_id\n AND f.completed_at IS NULL\nWHERE p.name = 'Sarah Lee'\nGROUP BY p.patient_id, p.name;\n```\nReturned **1 row**.",
+      "citation": {
+        "sql": "SELECT p.patient_id, p.name, COUNT(f.follow_up_id) AS outstanding_follow_ups FROM app.patients AS p LEFT JOIN app.follow_ups AS f ON f.patient_id = p.patient_id AND f.completed_at IS NULL WHERE p.name = 'Sarah Lee' GROUP BY p.patient_id, p.name LIMIT 1000",
+        "columns": [
+          "patient_id",
+          "name",
+          "outstanding_follow_ups"
+        ],
+        "rows": [
+          [
+            101,
+            "Sarah Lee",
+            1
+          ]
+        ],
+        "rowCount": 1,
+        "total": 1,
+        "elapsed": 15,
+        "limit": 1000,
+        "truncated": false,
+        "phiCols": []
+      }
+    },
+    "cost": 0.05024,
+    "model": "gpt-5.5",
+    "requested_model": "gpt-5.5",
+    "transport": "in-process"
+  }
+]

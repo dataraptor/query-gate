@@ -209,6 +209,135 @@ def test_w3_delete_is_real_refusal_zero_writes(ro_config):
 
 
 # ==================================================================================================
+# Split 12 — the "Real forced boundary demo" path (R4/U-2): a write request submits the implied write
+# to the REAL guard, which rejects it for real. The model is STUBBED here so the demo path (detection
+# → translation → real rejection → refusal) runs **keyless** in CI; one live keyed variant runs the
+# real translator over HTTP below.
+# ==================================================================================================
+
+
+class _StubMessage:
+    def __init__(self, content):
+        self.content = content
+        self.refusal = None
+        self.tool_calls = None
+
+
+class _StubChoice:
+    def __init__(self, content):
+        self.message = _StubMessage(content)
+        self.finish_reason = "stop"
+
+
+class _StubResp:
+    def __init__(self, content):
+        self.choices = [_StubChoice(content)]
+        self.usage = None
+
+
+class _StubCompletions:
+    def __init__(self, replies):
+        self._replies = list(replies)
+        self._i = 0
+
+    def create(self, **_kw):
+        reply = self._replies[min(self._i, len(self._replies) - 1)]
+        self._i += 1
+        return _StubResp(reply)
+
+
+class _StubClient:
+    """A minimal OpenAI-shaped client: returns canned completions so the demo path needs no key."""
+
+    def __init__(self, *replies):
+        self.chat = type("C", (), {"completions": _StubCompletions(replies)})()
+
+
+def test_w12_is_write_request_detection():
+    """Write intent is detected (routes to the boundary demo); read questions are not (pure)."""
+    for q in ["Delete all patients named Smith.", "drop the claims table", "UPDATE encounters",
+              "please remove patient 101", "wipe the follow_ups", "truncate providers"]:
+        assert agent.is_write_request(q), q
+    for q in ["Which providers have the most overdue patients?", "How many patients are there?",
+              "list the tables", "count denied claims", "find Sarah Lee"]:
+        assert not agent.is_write_request(q), q
+
+
+def test_w12_resolve_model_falls_back_to_available_deployment():
+    """A requested model the local client can't serve falls back to the real deployment (R3/U-5)."""
+    default = agent._default_model()
+    assert agent._resolve_model("claude-opus-4-8") == default  # no Anthropic key → falls back
+    assert agent._resolve_model(default) == default
+    assert agent._resolve_model(None) == default
+
+
+def test_w12_message_echoes_requested_model(ro_config):
+    """A run echoes the requested model + reports the model that actually ran (R3/U-5)."""
+    events = _drain(agent.stream_run(
+        "overdue?", config=ro_config, model="claude-sonnet-4-6",
+        scripted_calls=[("run_select", {"sql": OVERDUE_SQL})], final_answer="300.",
+    ))
+    (msg,) = _by_type(events, "message")
+    assert msg["requested_model"] == "claude-sonnet-4-6"  # the chosen model reached the backend
+    assert msg["model"] == agent._default_model()  # what actually ran (honest)
+
+
+def test_w12_write_request_real_boundary_rejection_keyless(ro_config):
+    """A write request → a REAL rejected run_select step + real guard reason + refusal; 0 writes (U-2)."""
+    # Baseline patient count (a real read) — proves the write never executes.
+    before = agent.stream_run("count", config=ro_config,
+                              scripted_calls=[("run_select", {"sql": "SELECT count(*) AS n FROM app.patients"})],
+                              final_answer="")
+    before_count = next(e for e in before if e["type"] == "message")["message"]["citation"]["rows"][0][0]
+
+    fresh = dataclasses.replace(ro_config, audit_path=ro_config.audit_path + ".demo")
+    # Stub: the translator returns a real DELETE; the refusal call returns the agent's prose.
+    stub = _StubClient(
+        "DELETE FROM app.patients WHERE name LIKE 'Smith%'",
+        "I can't change data — the database is read-only. No changes were attempted.",
+    )
+    events = _drain(agent.stream_run(
+        "Delete all patients named Smith.", config=fresh, client=stub, model="claude-opus-4-8",
+    ))
+
+    (step_end,) = _by_type(events, "step-end")
+    assert step_end["step"]["tool"] == "run_select"
+    assert step_end["step"]["status"] == "rejected"
+    assert step_end["step"]["boundary"]["mode"] == "reject"
+    assert step_end["step"]["boundary"]["l1"] == "reject"
+    assert step_end["step"]["boundary"]["l2"] == "ghost" and step_end["step"]["boundary"]["l3"] == "ghost"
+    assert "data-modifying" in step_end["step"]["boundary"]["reason"].lower()
+
+    (audit_ev,) = _by_type(events, "audit-line")
+    assert audit_ev["line"]["status"] == "rejected" and audit_ev["line"]["error"]
+
+    (msg,) = _by_type(events, "message")
+    assert msg["message"]["kind"] == "refusal"
+    assert msg["message"]["reason"] == audit_ev["line"]["error"]  # refusal carries the real guard reason
+    assert msg["requested_model"] == "claude-opus-4-8"
+
+    # 0 writes executed: the patient count is unchanged.
+    after = agent.stream_run("count", config=ro_config,
+                             scripted_calls=[("run_select", {"sql": "SELECT count(*) AS n FROM app.patients"})],
+                             final_answer="")
+    after_count = next(e for e in after if e["type"] == "message")["message"]["citation"]["rows"][0][0]
+    assert after_count == before_count
+
+
+def test_w12_write_demo_falls_back_when_translation_not_a_write(ro_config):
+    """If translation yields a non-write, a real DML fallback still shows a genuine rejection (U-2)."""
+    fresh = dataclasses.replace(ro_config, audit_path=ro_config.audit_path + ".fb")
+    # Translator returns a harmless SELECT (passes the guard); the demo must still reject a real write.
+    stub = _StubClient("SELECT 1", "read-only, no changes made")
+    events = _drain(agent.stream_run("Erase everything", config=fresh, client=stub))
+    rejected = [e for e in _by_type(events, "step-end") if e["step"]["status"] == "rejected"]
+    assert rejected, "the fallback DML must produce a real rejection"
+    assert rejected[-1]["step"]["boundary"]["mode"] == "reject"
+    (msg,) = _by_type(events, "message")
+    assert msg["message"]["kind"] == "refusal"
+
+
+# ==================================================================================================
 # W-4 — the search path cites the real matched row (DB; keyless).
 # ==================================================================================================
 
@@ -402,3 +531,33 @@ def test_w1_live_overdue_real_loop(ro_config):
     (msg,) = _by_type(events, "message")
     assert msg["message"]["kind"] in ("answer", "refusal")
     assert msg["model"] and msg["transport"] == "in-process"
+
+
+@pytest.mark.skipif(not _has_model_key(), reason="no model key — live boundary-demo over HTTP")
+def test_w12_live_delete_demo_over_http(role_url, seeded_db, tmp_path):
+    """Over the real /api/ask route with the live translator: "Delete …" → a real rejected step +
+    boundary reject + real guard reason + a refusal, 0 writes (U-2 end-to-end, keyed)."""
+    from starlette.testclient import TestClient
+
+    from querygate.api.server import create_app
+
+    cfg = Config(database_url=role_url, audit_path=str(tmp_path / "audit.jsonl"))
+    client = TestClient(create_app(cfg))
+    resp = client.post("/api/ask", json={"question": "Delete all patients named Smith.",
+                                          "model": "claude-opus-4-8"})
+    assert resp.status_code == 200
+    events = [json.loads(ln) for ln in resp.text.splitlines() if ln.strip()]
+
+    rejected = [e for e in _by_type(events, "step-end") if e["step"]["status"] == "rejected"]
+    assert rejected, "the live demo must show a real rejected write step"
+    assert rejected[0]["step"]["boundary"]["mode"] == "reject"
+    (msg,) = _by_type(events, "message")
+    assert msg["message"]["kind"] == "refusal" and msg["message"]["reason"]
+    assert msg["requested_model"] == "claude-opus-4-8" and msg["model"] == agent._default_model()
+
+    # 0 writes: the read-only role still sees every patient (count unchanged via a real read).
+    import psycopg
+
+    with psycopg.connect(role_url) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM app.patients")
+        assert cur.fetchone()[0] == 500

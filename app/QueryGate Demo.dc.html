@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
+<script src="./api.js"></script>
+<script src="./reduce.js"></script>
 </head>
 <body>
 <x-dc>
@@ -220,6 +222,17 @@
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ m.isError }}" hint-placeholder-val="{{ true }}">
+                    <div style="border-radius:14px;background:#FBECEC;border:1px solid #F3C9C9;padding:15px 17px">
+                      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+                        <span style="font-size:16px">⚠</span>
+                        <span style="font-size:15px;font-weight:600;color:#B42318">Couldn't reach the backend</span>
+                      </div>
+                      <div style="font-size:13.5px;line-height:1.55;color:#7A271A">{{ m.prose }}</div>
+                      <div class="qg-mono" style="margin-top:9px;font-size:10.5px;color:#B42318">no answer shown — the UI does not fall back to sample data</div>
+                    </div>
+                  </sc-if>
+
                 </div>
               </sc-if>
 
@@ -354,7 +367,7 @@
         </sc-if>
 
         <sc-if value="{{ tabEval }}" hint-placeholder-val="{{ true }}">
-          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">DETERMINISTIC · CI-GATED · NO API KEY</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">{{ evalDetHeader }}</div>
           <div style="border-radius:11px;background:#ECFBF1;padding:13px;margin-bottom:15px">
             <div style="font-size:12.5px;font-weight:600;color:#15803D;margin-bottom:10px">Write rejected at each layer, independently</div>
             <div style="display:flex;flex-direction:column;gap:7px">
@@ -364,7 +377,7 @@
             </div>
             <div class="qg-mono" style="margin-top:11px;padding-top:10px;box-shadow:0 -1px 0 rgba(21,128,61,.15);font-size:11px;color:#15803D">0 writes executable · proven, not promised</div>
           </div>
-          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">DISTRIBUTIONAL · OPUS 4.8 · N=3 · MEAN ± SPREAD</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:#9AA0AA;margin-bottom:11px">{{ evalDistHeader }}</div>
           <div style="display:flex;flex-direction:column;gap:12px">
             <sc-for list="{{ evalMetrics }}" as="m" hint-placeholder-count="4">
               <div>
@@ -389,18 +402,10 @@
 
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
-const OVERDUE_SQL = `SELECT p.provider_id, p.name, p.specialty, count(*) AS overdue
-FROM follow_ups f
-JOIN encounters e ON e.patient_id = f.patient_id
-JOIN providers  p ON p.provider_id = e.provider_id
-WHERE f.completed_at IS NULL AND f.due_date < now()
-GROUP BY p.provider_id, p.name, p.specialty
-ORDER BY overdue DESC`;
-const SEARCH_SQL = `SELECT pt.patient_id, pt.name, count(*) AS outstanding
-FROM follow_ups f JOIN patients pt ON pt.patient_id = f.patient_id
-WHERE pt.name ILIKE 'Sarah Lee' AND f.completed_at IS NULL
-GROUP BY pt.patient_id, pt.name`;
-const DELETE_SQL = "DELETE FROM patients WHERE name LIKE 'Smith%'";
+// Split 12: the canned scenario engine and keyword router are GONE — the real agent (over /api/ask)
+// now decides which tools to call, and every number/SQL/row/boundary verdict arrives as a live
+// event. The data source is window.QueryGateApi (the NDJSON stream) + window.QueryGateReduce
+// (the one place an event becomes a state patch). The render layer below is untouched.
 
 class Component extends DCLogic {
   state = {
@@ -408,13 +413,25 @@ class Component extends DCLogic {
     expanded: { patients:true, providers:false, encounters:false, claims:false, follow_ups:true },
     activeTable: null, redactionOn: false,
     model: 'claude-opus-4-8', transport: 'stdio', running: false, cost: 0,
+    ranModel: '', requestedModel: '', ranTransport: '', streamError: '', eval: null,
     boundary: { active:false, mode:'idle', l1:'idle', l2:'idle', l3:'idle', sql:'', reason:'' },
     statusLine: '', openRows: {}, schemaOpen:false, proofOpen:false,
     leftW: 252, rightW: 388,
   };
   timers = []; uid = 0;
+  componentDidMount(){
+    // Same-origin client (the adapter serves this UI), then load the eval summary for the Eval tab.
+    this.api = window.QueryGateApi.makeClient();
+    this.loadEval();
+  }
   componentWillUnmount(){ this.timers.forEach(clearTimeout); }
   after(ms, fn){ const t=setTimeout(fn, ms); this.timers.push(t); return t; }
+  loadEval(){
+    if(!this.api) return;
+    this.api.getEval()
+      .then(summary=> this.setState({ eval: window.QueryGateReduce.evalVm(summary) }))
+      .catch(()=>{ /* eval tab falls back to the labelled sample (eval stays null) */ });
+  }
 
   startResize(side, e){
     e.preventDefault();
@@ -458,118 +475,44 @@ class Component extends DCLogic {
       {n:'due_date',t:'date'},{n:'completed_at',t:'timestamptz',nul:true}]},
   ]; }
 
-  scenarios(){ return {
-    overdue: {
-      table:'follow_ups',
-      steps:[
-        {tool:'list_tables', args:{}, status:'ok', latency:2, dur:520, rowCount:5},
-        {tool:'describe_table', args:{table:'follow_ups'}, status:'ok', latency:4, dur:620, rowCount:null},
-        {tool:'run_select', args:{sql:OVERDUE_SQL}, status:'ok', latency:41, dur:900, rowCount:7,
-          boundary:{mode:'pass',l1:'pass',l2:'pass',l3:'pass'}},
-      ],
-      cost:0.0041, kind:'answer',
-      prose:'Dr. Alice Okafor (cardiology) leads with 38 patients overdue for follow-up, ahead of Dr. Marcus Reyes (31) and Dr. Priya Nair (24). Across all 7 providers with overdue patients, 142 follow-ups are past due.',
-      citation:{ sql:OVERDUE_SQL, columns:['provider_id','name','specialty','overdue'],
-        rows:[[201,'Dr. Alice Okafor','cardiology',38],[118,'Dr. Marcus Reyes','internal medicine',31],
-        [145,'Dr. Priya Nair','endocrinology',24],[160,'Dr. Tom Becker','oncology',19],
-        [133,'Dr. Lena Cho','cardiology',14],[127,'Dr. Sam Patel','family medicine',9],
-        [152,'Dr. Iris Wong','neurology',7]],
-        rowCount:7, total:142, elapsed:41, limit:1000, truncated:false, phiCols:[] },
-    },
-    search: {
-      table:'patients',
-      steps:[
-        {tool:'list_tables', args:{}, status:'ok', latency:2, dur:480, rowCount:5},
-        {tool:'search_text', args:{term:'Sara Lee', table:'patients'}, status:'ok', latency:6, dur:640, rowCount:1, phi:true,
-          boundary:{mode:'pass',l1:'pass',l2:'pass',l3:'pass'}},
-        {tool:'run_select', args:{sql:SEARCH_SQL}, status:'ok', latency:8, dur:700, rowCount:1, phi:true,
-          boundary:{mode:'pass',l1:'pass',l2:'pass',l3:'pass'}},
-      ],
-      cost:0.0033, kind:'answer',
-      prose:'I found one close match for “Sara Lee” — patient_id 207, “Sarah Lee”. She has 3 follow-ups still outstanding.',
-      citation:{ sql:SEARCH_SQL, columns:['patient_id','name','outstanding'],
-        rows:[[207,'Sarah Lee',3]], rowCount:1, total:1, elapsed:8, limit:1000, truncated:false, phiCols:['name'] },
-    },
-    refusal: {
-      table:'patients',
-      steps:[
-        {tool:'run_select', args:{sql:DELETE_SQL}, status:'rejected', latency:1, dur:760,
-          error:'Only a single read-only SELECT is permitted.',
-          boundary:{mode:'reject',l1:'reject',l2:'ghost',l3:'ghost', reason:'Write statement (DELETE) found in AST.'}},
-      ],
-      cost:0.0009, kind:'refusal',
-      reason:'Only a single read-only SELECT is permitted.',
-      prose:'I won’t attempt that.',
-    },
-  }; }
-
-  pick(text){
-    const t=(text||'').toLowerCase();
-    if(/\b(delete|drop|truncate|update|insert|remove|wipe|erase|mark all)\b/.test(t)) return 'refusal';
-    if(/\b(sara|sarah|spell|search|find .* named|fuzzy)\b/.test(t)) return 'search';
-    return 'overdue';
-  }
-
   send(){ const t=this.state.draft.trim(); if(!t||this.state.running) return; this.setState({draft:''}); this.ask(t); }
+
+  // The live engine: open the /api/ask stream and drive state from REAL events (Split 12 R1). Each
+  // event becomes a state patch via the pure reducer — the same `trace`/`audit`/`boundary`/`messages`
+  // shapes the render layer already consumes, now fed by the real agent loop instead of canned data.
   ask(text){
-    if(this.state.running) return;
-    const sc = this.scenarios()[this.pick(text)];
+    if(this.state.running || !this.api) return;
+    const reduce = window.QueryGateReduce;
+    const userId = ++this.uid;
+    this.setState(s=> reduce.askInitPatch(s, userId, text));
+    const params = { model: this.state.model, redaction: this.state.redactionOn };
+    this.api.streamAsk(text, params, (ev)=> this.onStreamEvent(ev))
+      .catch(err=> this.onStreamError(err));
+  }
+
+  onStreamEvent(ev){
+    const reduce = window.QueryGateReduce;
+    // The final `message` event needs a fresh id for the agent bubble; allocate it here so the
+    // reducer stays pure.
+    const nextId = ev && ev.type==='message' ? (++this.uid) : null;
+    this.setState(s=> reduce.applyEvent(s, ev, nextId));
+  }
+
+  onStreamError(err){
+    const reduce = window.QueryGateReduce;
+    const banner = (err && err.bannerText) || (err && err.message) || 'The QueryGate backend is unreachable.';
     const id = ++this.uid;
-    this.setState(s=>({ messages: s.messages.concat([{id, role:'user', text}]),
-      running:true, trace:[], tab:'trace', proofOpen:true, schemaOpen:false,
-      boundary:{active:false,mode:'idle',l1:'idle',l2:'idle',l3:'idle',sql:'',reason:''},
-      statusLine:'connecting · reading server instructions…' }));
-    this.run(sc);
-  }
-
-  run(sc){
-    let delay = 420;
-    const labels = {list_tables:'discovering schema…', describe_table:'inspecting '+sc.table+'…',
-      run_select:'running query…', search_text:'fuzzy-searching text columns…'};
-    sc.steps.forEach((step)=>{
-      this.after(delay, ()=>{
-        this.setState(s=>({ trace: s.trace.concat([{...step, status:'running'}]), statusLine: labels[step.tool]||'working…' }));
-      });
-      this.after(delay+step.dur, ()=> this.resolve(step));
-      delay += step.dur + 320;
-    });
-    this.after(delay+200, ()=> this.finish(sc));
-  }
-
-  resolve(step){
-    this.setState(s=>{
-      const trace = s.trace.slice();
-      const i = trace.length-1;
-      if(i>=0) trace[i] = {...trace[i], status:step.status, latency:step.latency};
-      const a = { ts:new Date().toISOString(), tool:step.tool, args:step.args,
-        row_count: (step.rowCount===undefined?null:step.rowCount), latency_ms:step.latency, status:step.status };
-      if(step.error) a.error = step.error;
-      a.redactions = (s.redactionOn && step.phi) ? ['patients.name'] : [];
-      const audit = s.audit.concat([a]);
-      let boundary = s.boundary, tab = s.tab;
-      if(step.boundary){
-        boundary = { active:true, sql: step.args.sql||'', reason: step.boundary.reason||'',
-          mode:step.boundary.mode, l1:step.boundary.l1, l2:step.boundary.l2, l3:step.boundary.l3 };
-        if(step.boundary.mode==='reject') tab='boundary';
-      }
-      return { trace, audit, boundary, tab };
-    });
-  }
-
-  finish(sc){
-    const id = ++this.uid;
-    const msg = { id, role:'agent', kind:sc.kind, prose:sc.prose };
-    if(sc.kind==='answer') msg.citation = sc.citation;
-    if(sc.kind==='refusal') msg.reason = sc.reason;
-    this.setState(s=>({ messages: s.messages.concat([msg]), running:false, statusLine:'', cost: s.cost + sc.cost }));
+    this.setState(s=> reduce.errorPatch(s, id, banner));
   }
 
   toggleRows(id){ this.setState(s=>({ openRows:{...s.openRows, [id]: !s.openRows[id]} })); }
   toggleTable(name){ this.setState(s=>({ expanded:{...s.expanded, [name]: !s.expanded[name]} })); }
   toggleRedaction(){ this.setState(s=>({ redactionOn: !s.redactionOn })); }
   setTab(t){ this.setState({tab:t}); }
-  cycleModel(){ this.setState(s=>({ model: s.model==='claude-opus-4-8'?'claude-sonnet-4-6':'claude-opus-4-8' })); }
-  cycleTransport(){ this.setState(s=>({ transport: s.transport==='stdio'?'http connector':'stdio' })); }
+  // The model toggle is a REQUEST control: the selected model is sent to /api/ask. Clearing `ranModel`
+  // makes the header show the new selection until the next run reports what ACTUALLY ran (Split 12 R3).
+  cycleModel(){ this.setState(s=>({ model: s.model==='claude-opus-4-8'?'claude-sonnet-4-6':'claude-opus-4-8', ranModel:'' })); }
+  cycleTransport(){ this.setState(s=>({ transport: s.transport==='stdio'?'http connector':'stdio', ranTransport:'' })); }
   toggleSchema(){ this.setState(s=>({ schemaOpen:!s.schemaOpen, proofOpen:false })); }
   toggleProof(){ this.setState(s=>({ proofOpen:!s.proofOpen, schemaOpen:false })); }
   closeDrawers(){ this.setState({ schemaOpen:false, proofOpen:false }); }
@@ -597,22 +540,26 @@ class Component extends DCLogic {
     });
     const messages = st.messages.map(m=>{
       if(m.role==='user') return { id:m.id, isUser:true, isAgent:false, text:m.text };
-      const isAnswer = m.kind==='answer', isRefusal = m.kind==='refusal';
-      const vm = { id:m.id, isUser:false, isAgent:true, isAnswer, isRefusal, prose:m.prose,
-        badge: isRefusal?'🛡 held':'grounded ✓',
-        badgeBg: isRefusal?'#E7F8F2':'#ECFDF3', badgeColor: isRefusal?'#0B7A6E':'#047857' };
+      const isAnswer = m.kind==='answer', isRefusal = m.kind==='refusal', isError = m.kind==='error';
+      const badge = isError?'⚠ error':isRefusal?'🛡 held':'grounded ✓';
+      const badgeBg = isError?'#FBECEC':isRefusal?'#E7F8F2':'#ECFDF3';
+      const badgeColor = isError?'#DC2626':isRefusal?'#0B7A6E':'#047857';
+      const vm = { id:m.id, isUser:false, isAgent:true, isAnswer, isRefusal, isError, prose:m.prose,
+        badge, badgeBg, badgeColor };
       if(isRefusal) vm.reason = m.reason;
       if(isAnswer){
         const c=m.citation, phi=c.phiCols||[];
-        const anyMask = st.redactionOn && phi.length>0;
-        const rowsView = c.rows.map(r=> r.map((cell,ci)=>{
-          const masked = st.redactionOn && phi.includes(c.columns[ci]);
-          return { v: masked?'***':cell, color: masked?'#7C3AED':'#384150' };
+        // Redaction is enforced SERVER-SIDE (Split 12 U-6): the backend already masked cells to '***'
+        // and reported the masked columns in `phiCols`. The UI just displays what the real filter
+        // produced — it never fakes a mask client-side. A masked cell is the literal '***'.
+        const rowsView = c.rows.map(r=> r.map((cell)=>{
+          const masked = cell==='***';
+          return { v: cell, color: masked?'#7C3AED':'#384150' };
         }));
         const rowsOpen = !!st.openRows[m.id];
         Object.assign(vm, { sql:c.sql, columns:c.columns, rowsView, rowCount:c.rowCount,
           totalLabel: c.total+' total', elapsed:c.elapsed, limit:c.limit,
-          masked:anyMask, maskedLabel:'redacted: '+phi.length+' col',
+          masked:phi.length>0, maskedLabel:'redacted: '+phi.length+' col',
           rowsOpen, rowsToggleLabel: rowsOpen?'▾ hide rows':'▸ view rows',
           toggleRows: ()=>this.toggleRows(m.id) });
       }
@@ -635,9 +582,13 @@ class Component extends DCLogic {
       color: st.tab===k?'#16181D':'#8B919B', weight: st.tab===k?'600':'500',
       underline: st.tab===k?'#2F6FED':'transparent',
       dot: (k==='boundary'&&mode==='reject'&&st.tab!=='boundary') }));
-    const transportDot = st.transport==='stdio' ? (st.running?'#2F6FED':'#9AA0AA') : '#0E9384';
+    // Header shows what ACTUALLY ran once a run reports it (honest), else the requested selection.
+    const transportShown = st.ranTransport || st.transport;
+    const modelShown = st.ranModel || st.model;
+    const transportDot = transportShown==='stdio' ? (st.running?'#2F6FED':'#9AA0AA') : '#0E9384';
+    const ev = st.eval || window.QueryGateReduce.evalVm(null);
     return {
-      draft:st.draft, model:st.model, transport:st.transport, transportDot,
+      draft:st.draft, model:modelShown, transport:transportShown, transportDot,
       costStr:'$'+st.cost.toFixed(4), running:st.running, statusLine:st.statusLine,
       empty: st.messages.length===0, suggested, tables, messages, tabs,
       leftW: st.leftW, rightW: st.rightW,
@@ -663,20 +614,10 @@ class Component extends DCLogic {
       traceEmpty: st.trace.length===0, auditEmpty: st.audit.length===0,
       auditOk: st.audit.filter(a=>a.status==='ok').length,
       auditRej: st.audit.filter(a=>a.status==='rejected').length,
-      evalChecks: [
-        {mark:'✓',color:'#15803D',label:'Layer 1 — SQL guard rejects'},
-        {mark:'✓',color:'#0E72A8',label:'Layer 2 — READ ONLY txn rejects'},
-        {mark:'✓',color:'#0B7A6E',label:'Layer 3 — SELECT-only role rejects'},
-        {mark:'✓',color:'#3D52CC',label:'data-modifying CTE (whole-AST walk)'},
-        {mark:'✓',color:'#3D52CC',label:';-chained & SELECT … FOR UPDATE / INTO'},
-        {mark:'✓',color:'#3D52CC',label:'denylisted function (pg_read_file …)'},
-      ],
-      evalMetrics: [
-        {label:'Grounded-rate',value:'0.94',spread:'± 0.03',bar:'94%',color:'#15803D'},
-        {label:'Table-precision',value:'0.97',spread:'± 0.02',bar:'97%',color:'#0E72A8'},
-        {label:'Answer-correctness',value:'0.91',spread:'± 0.05',bar:'91%',color:'#6D28D9'},
-        {label:'0 destructive calls',value:'100%',spread:'deterministic',bar:'100%',color:'#0B7A6E'},
-      ],
+      // Eval / CI tab bound to /api/eval (Split 12 R5/U-8): the real grounding-eval summary when a run
+      // exists, else the sample numbers LABELLED as a sample (never sample numbers shown as measured).
+      evalDetHeader: ev.detHeader, evalDistHeader: ev.distHeader,
+      evalChecks: ev.checks, evalMetrics: ev.metrics,
     };
   }
 

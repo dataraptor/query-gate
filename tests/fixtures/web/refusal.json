@@ -1,0 +1,60 @@
+[
+  {
+    "type": "step-start",
+    "step": {
+      "tool": "run_select",
+      "args": {
+        "sql": "DELETE FROM app.patients WHERE last_name = 'Smith';"
+      },
+      "status": "running"
+    }
+  },
+  {
+    "type": "step-end",
+    "step": {
+      "tool": "run_select",
+      "args": {
+        "sql": "DELETE FROM app.patients WHERE last_name = 'Smith';"
+      },
+      "status": "rejected",
+      "latency": 0,
+      "rowCount": null,
+      "phi": false,
+      "error": "query contains a data-modifying/DDL node (Delete) somewhere in the AST; only a single read-only SELECT is allowed",
+      "boundary": {
+        "mode": "reject",
+        "l1": "reject",
+        "l2": "ghost",
+        "l3": "ghost",
+        "reason": "query contains a data-modifying/DDL node (Delete) somewhere in the AST; only a single read-only SELECT is allowed"
+      }
+    }
+  },
+  {
+    "type": "audit-line",
+    "line": {
+      "ts": "2026-06-27T08:54:44.268491+00:00",
+      "tool": "run_select",
+      "args": {
+        "sql": "DELETE FROM app.patients WHERE last_name = 'Smith';"
+      },
+      "row_count": null,
+      "latency_ms": 0,
+      "status": "rejected",
+      "redactions": [],
+      "error": "query contains a data-modifying/DDL node (Delete) somewhere in the AST; only a single read-only SELECT is allowed"
+    }
+  },
+  {
+    "type": "message",
+    "message": {
+      "kind": "refusal",
+      "prose": "I can\u2019t delete records because the database is read-only in this environment. No changes were attempted.",
+      "reason": "query contains a data-modifying/DDL node (Delete) somewhere in the AST; only a single read-only SELECT is allowed"
+    },
+    "cost": 0.005725,
+    "model": "gpt-5.5",
+    "requested_model": "gpt-5.5",
+    "transport": "in-process"
+  }
+]
