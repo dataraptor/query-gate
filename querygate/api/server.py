@@ -61,13 +61,35 @@ def _request_config(base: Config, *, redaction: bool) -> Config:
     return dataclasses.replace(base, audit_path=audit_path, redact_path=redact_path)
 
 
+def _error_event(exc: Exception) -> dict:
+    """A terminal ``message``/``error`` event the UI reducer already renders (clears ``running``,
+    shows a red notice). Emitted when the agent loop raises **mid-stream** — e.g. the model key is
+    unset (a :class:`RuntimeError` from the eval client) or a transient API/network failure. Without
+    this the stream would end silently after a 200 and the UI would spin forever (no rejection fires,
+    so ``.catch`` never runs). Honest: it reports the real failure, never a fabricated answer."""
+    if isinstance(exc, RuntimeError):
+        prose = str(exc)  # config errors (missing key) already carry a clear, actionable message
+    else:
+        prose = f"The agent run failed ({type(exc).__name__}: {exc}). The read-only boundary is unaffected."
+    return {"type": "message", "message": {"kind": "error", "prose": prose}}
+
+
+def _guarded(events: Iterator[dict]) -> Iterator[dict]:
+    """Yield every event, but turn an exception raised by the generator into a terminal error event
+    instead of an abrupt empty stream (defense in depth for the live ``/api/ask`` path)."""
+    try:
+        yield from events
+    except Exception as exc:  # noqa: BLE001 - any agent-loop failure must surface as one honest event
+        yield _error_event(exc)
+
+
 async def _ndjson_stream(events: Iterator[dict]):
     """Adapt the sync event generator to an async NDJSON byte stream.
 
     Each blocking ``next(events)`` (an LLM round-trip or a DB query) runs in a worker thread so it
     never blocks the event loop; each event is emitted as one ``json`` line.
     """
-    it = iter(events)
+    it = iter(_guarded(events))
     sentinel = object()
     while True:
         item = await anyio.to_thread.run_sync(lambda: next(it, sentinel))

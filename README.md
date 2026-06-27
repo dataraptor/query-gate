@@ -108,9 +108,20 @@ Captured **2026-06-27** from `querygate eval --quick` on **Azure gpt-5.5** (`PRO
 
 ## Quickstart
 
+### A. The whole demo in Docker (one command)
+
+```bash
+cp .env.example .env                    # set the Azure model key for the live /api/ask answers (optional)
+docker compose up --build               # Postgres + Layer-3 role + deterministic seed + the live web demo
+```
+
+Compose brings up **three services**: `db` (Postgres 16, which applies `scripts/schema.sql` then the Layer-3 role/grants on first init), a one-shot `seeder` (`querygate seed --reset` as the admin role), and `web` (`querygate web` as the **read-only** role). When it's healthy, open **http://localhost:8000** for the web demo. The host port is published on **127.0.0.1 only** (loopback) — the container binds `0.0.0.0` internally just so Docker's port mapping can reach it.
+
+### B. Run it locally (no Docker)
+
 ```bash
 # 1. Bring up Postgres + the read-only role + the deterministic seed (one command).
-docker compose up                       # runs scripts/init_role.sql (Layer 3) then scripts/seed.py
+docker compose up db seeder             # just the DB + seed; or stand up Postgres yourself + `querygate seed --reset`
 
 # 2. Install QueryGate.
 pip install -e .                         # or: uv pip install -e .
@@ -132,7 +143,7 @@ querygate eval --quick                   # the distributional grounding report (
 { "mcpServers": { "querygate": { "command": "uv", "args": ["run", "querygate"] } } }
 ```
 
-**Keys.** Copy `.env.example` → `.env` (gitignored, never committed) and set the two DB URLs. The whole Layer-3 story rests on the server *only ever* using the read-only `QUERYGATE_DATABASE_URL` — `DATABASE_URL` (the admin role that can write) is used only by the seed loader and the one-time role setup. The grounding eval additionally needs a model key (the Azure gpt-5.5 trio in this repo).
+**Keys.** Copy `.env.example` → `.env` (gitignored, never committed) and set the two DB URLs. **`.env` is loaded automatically** by every `querygate` command and by `docker compose`, so no manual `export` is needed (an explicit environment variable still wins over the file). The whole Layer-3 story rests on the server *only ever* using the read-only `QUERYGATE_DATABASE_URL` — `DATABASE_URL` (the admin role that can write) is used only by the seed loader and the one-time role setup. The live web demo (`/api/ask`) and the grounding eval additionally need a model key (the Azure gpt-5.5 trio in this repo); without it the boundary, the UI, and `querygate query` still work, and `/api/ask` shows an honest "no model key" notice rather than a silent hang.
 
 > ⚠️ **Scope fence.** The HTTP transport binds **localhost (127.0.0.1) only** and has **no authentication** — for the demo. Bearer-token auth and a network-exposed bind are roadmap, not v1. Do not expose this server to a network without adding auth first.
 

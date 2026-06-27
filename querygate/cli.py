@@ -41,6 +41,22 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SEED_SCRIPT = REPO_ROOT / "scripts" / "seed.py"
 EVAL_SCRIPT = REPO_ROOT / "evals" / "run_eval.py"
 
+
+def _load_dotenv() -> None:
+    """Load ``.env`` (repo root, then the current directory) so the documented quickstart
+    (``cp .env.example .env`` → ``querygate web``) works with no manual ``export`` (spec §15).
+
+    Existing process env always wins (``override=False``) — CI and an explicit ``VAR=… querygate``
+    keep priority over the file. Best-effort: if ``python-dotenv`` is missing the CLI still runs, it
+    just won't auto-read ``.env`` (every var can still be set in the environment directly).
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # pragma: no cover - dotenv is a declared dep; this is the belt-and-suspenders path
+        return
+    load_dotenv(REPO_ROOT / ".env", override=False)
+    load_dotenv(Path.cwd() / ".env", override=False)
+
 # Exit codes. 0 = ok. The headline refusal (a write blocked at the guard) and the not-yet-wired
 # eval seam exit 2; a DB/config/runtime failure exits 3. Anything non-zero satisfies the "visibly
 # fails" contract; the split distinctions just make scripting precise.
@@ -192,11 +208,16 @@ def _cmd_web(args: argparse.Namespace) -> int:
     """
     from .api import server
 
+    # Default to the loopback bind (the §19 scope fence). `--host 0.0.0.0` (or QUERYGATE_WEB_HOST) is
+    # only for running inside a container, where Docker port mapping needs a non-loopback bind; the
+    # compose file still publishes the host port on 127.0.0.1 so the host-side exposure stays loopback.
+    host = args.host or server.HOST
+    visit = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
     print(
-        f"querygate web - serving the demo on http://{server.HOST}:{args.port} "
-        f"(UI + /api/ask + /api/eval). Ctrl-C to stop.",
+        f"querygate web - serving the demo on http://{host}:{args.port} "
+        f"(open http://{visit}:{args.port} - UI + /api/ask + /api/eval). Ctrl-C to stop.",
     )
-    server.serve(host=server.HOST, port=args.port)
+    server.serve(host=host, port=args.port)
     return EXIT_OK
 
 
@@ -259,6 +280,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     w = sub.add_parser("web", help="serve the live web demo (static UI + /api adapter) on localhost")
     w.add_argument("--port", type=int, default=8000, help="port for the web demo (default: 8000)")
+    w.add_argument(
+        "--host",
+        default=os.environ.get("QUERYGATE_WEB_HOST") or None,
+        help="bind address (default: 127.0.0.1 - loopback only). Set 0.0.0.0 to serve inside a "
+        "container (publish the host port on 127.0.0.1 to keep the loopback-only posture).",
+    )
     w.set_defaults(func=_cmd_web)
 
     e = sub.add_parser("eval", help="run the grounding eval [Split 09]")
@@ -273,6 +300,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code (0 ok, non-zero on refusal/error)."""
+    _load_dotenv()
     parser = _build_parser()
     args = parser.parse_args(argv)
 

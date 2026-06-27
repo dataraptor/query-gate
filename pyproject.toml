@@ -31,6 +31,10 @@ dependencies = [
     # This is what QueryGate *is*: the server half of "MCP" (Appendix A). Pinned because the
     # published tool schema and the transport behaviour are part of the product contract.
     "mcp==1.28.1",
+    # Loads `.env` on CLI start so the documented quickstart (`cp .env.example .env` → `querygate web`)
+    # works with no manual `export`. Existing process env wins (override=False). Already used by the
+    # eval/connector seams; promoted to a core dep so every `querygate` invocation reads `.env`.
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,34 @@
+# Keep the build context small and reproducible — never ship local state or secrets into the image.
+.git
+.github
+.gitignore
+.gitattributes
+
+# Secrets + local env (the web service reads .env at runtime via compose env_file, not from the image).
+.env
+
+# Local Postgres data dirs / dumps (never bake a database into the app image).
+pgdata/
+*.sqlite
+*.dump
+
+# Python build/cache cruft.
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime + scratch artifacts.
+audit.jsonl
+evals/runs/
+tmp/
+*.log
+
+# Tests + planning docs aren't needed in the runtime image.
+tests/

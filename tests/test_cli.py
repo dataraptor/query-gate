@@ -20,6 +20,14 @@ import pytest
 from querygate import cli
 
 
+@pytest.fixture(autouse=True)
+def _no_dotenv(monkeypatch):
+    """Keep the CLI tests hermetic: ``main()`` now loads the repo ``.env`` on start (so the quickstart
+    works with no manual export), but these tests assert env-resolution behaviour and must not pick up
+    the developer's local ``.env``. Neutralize the load so each test controls its own environment."""
+    monkeypatch.setattr(cli, "_load_dotenv", lambda: None)
+
+
 def _audit_lines(path: Path) -> list[dict]:
     if not path.exists():
         return []

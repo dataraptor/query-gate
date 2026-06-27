@@ -1,13 +1,18 @@
-# QueryGate — one-command local bring-up (spec §8).
+# QueryGate — one-command local bring-up of the WHOLE demo (spec §8).
 #
-#   cp .env.example .env        # (first time only — adjust passwords if you like)
-#   docker compose up           # Postgres + schema + Layer-3 role + seeded data
+#   cp .env.example .env        # (first time only — set the Azure key for the live /api/ask answers)
+#   docker compose up --build   # Postgres + Layer-3 role + seed + the live web demo on :8000
 #
-# On first init the Postgres container runs scripts/schema.sql then the Layer-3
-# role/grants (docker-init-role.sh -> init_role.sql); once it is healthy, the one-shot
-# `seeder` service loads the deterministic dataset. After it exits, the DB is ready and
-# the read-only `querygate` role is in place. Re-running `docker compose up` re-seeds
-# (idempotent) without dropping the role or its grants.
+# Then open http://localhost:8000 for the web demo, or talk MCP/CLI to the read-only role.
+#
+# Services:
+#   * db     — Postgres 16. On first init it runs scripts/schema.sql then the Layer-3 role/grants
+#              (docker-init-role.sh -> init_role.sql). The read-only `querygate` role is created here.
+#   * seeder — the querygate image, run once as the ADMIN role to load the deterministic seed, then exits.
+#   * web    — the querygate image running `querygate web`: the static app/ UI + the live /api/* agent
+#              loop, connecting as the READ-ONLY role. Published on 127.0.0.1 only (loopback — §19).
+#
+# Re-running `docker compose up` re-seeds (idempotent) without dropping the role or its grants.
 services:
   db:
     image: postgres:16
@@ -17,7 +22,7 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-querygate}"
       QUERYGATE_DB_PASSWORD: "${QUERYGATE_DB_PASSWORD:-querygate_pw}"
     ports:
-      - "${DB_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
     volumes:
       - querygate-pgdata:/var/lib/postgresql/data
       # initdb hooks run alphabetically, once, on an empty data dir:
@@ -30,24 +35,46 @@ services:
       timeout: 3s
       retries: 20
 
-  # One-shot data loader: pip-installs the pinned deps and runs the deterministic seed
-  # as the admin role, then exits. Kept as a runtime install so no extra Dockerfile is needed.
+  # One-shot data loader: runs the deterministic seed as the admin role through the app's own CLI
+  # (`querygate seed --reset`), then exits. Idempotent (truncate-and-reload).
   seeder:
-    image: python:3.12-slim
+    build: .
+    image: querygate:local
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-querygate_admin}:${POSTGRES_PASSWORD:-admin_pw}@db:5432/${POSTGRES_DB:-querygate}"
-    volumes:
-      - ./scripts:/app/scripts:ro
-      - ./pyproject.toml:/app/pyproject.toml:ro
-    working_dir: /app
-    command:
-      - bash
-      - -c
-      - "pip install --quiet 'psycopg[binary]==3.2.3' 'faker==30.8.2' && python scripts/seed.py --reset"
+    command: ["querygate", "seed", "--reset"]
     restart: "no"
+
+  # The live web demo: the static app/ UI + the real agent loop (/api/ask) over the read-only boundary.
+  web:
+    build: .
+    image: querygate:local
+    depends_on:
+      seeder:
+        condition: service_completed_successfully
+    # Pull the Azure model key (for the live /api/ask answers) from .env if present; the DB URLs below
+    # always override the localhost ones in .env so they resolve to the `db` service inside the network.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # The server connects as the READ-ONLY role (the whole Layer-3 story). Never the admin URL.
+      QUERYGATE_DATABASE_URL: "postgresql://querygate:${QUERYGATE_DB_PASSWORD:-querygate_pw}@db:5432/${POSTGRES_DB:-querygate}"
+      QUERYGATE_AUDIT_PATH: "/data/audit.jsonl"
+      # Inside the container the server must bind 0.0.0.0 for Docker port mapping to reach it; the
+      # published port below is pinned to 127.0.0.1 so the host-side exposure stays loopback-only.
+      QUERYGATE_WEB_HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8000}:8000"
+    command: ["querygate", "web", "--port", "8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/eval > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   querygate-pgdata:

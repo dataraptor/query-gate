@@ -503,6 +503,69 @@ def test_ask_requires_question(web_client):
 
 
 # ==================================================================================================
+# Mid-stream failure → a terminal error event (not a silent empty stream).
+# A live-loop failure (unset model key, transient API error) raises *after* the 200 stream has begun,
+# so the UI's `.catch` never fires; without a terminal event the UI spins forever. `_guarded` turns
+# any such failure into one honest `message`/`error` event the reducer renders (clears `running`).
+# ==================================================================================================
+
+
+def test_guarded_emits_error_event_on_runtime_error():
+    """A RuntimeError (e.g. the model key is unset) becomes a terminal error event carrying its
+    actionable message — never a fabricated answer."""
+    from querygate.api.server import _guarded
+
+    def gen():
+        yield {"type": "step-start", "step": {"tool": "list_tables", "args": {}, "status": "running"}}
+        raise RuntimeError("AZURE_OPENAI_API_KEY is not set — the grounding eval needs a model key")
+
+    events = list(_guarded(gen()))
+    assert events[0]["type"] == "step-start"  # earlier events still stream
+    assert events[-1] == {
+        "type": "message",
+        "message": {
+            "kind": "error",
+            "prose": "AZURE_OPENAI_API_KEY is not set — the grounding eval needs a model key",
+        },
+    }
+
+
+def test_guarded_emits_error_event_on_unexpected_exception():
+    """A non-RuntimeError (a transient API/network failure) also surfaces as one honest error event
+    naming the failure, with the boundary reassurance — not an abrupt empty stream."""
+    from querygate.api.server import _guarded
+
+    def gen():
+        if False:  # make this a generator
+            yield
+        raise ValueError("connection reset by peer")
+
+    events = list(_guarded(gen()))
+    assert len(events) == 1
+    msg = events[-1]["message"]
+    assert msg["kind"] == "error"
+    assert "ValueError" in msg["prose"] and "boundary is unaffected" in msg["prose"]
+
+
+def test_cli_loads_dotenv(monkeypatch, tmp_path):
+    """`querygate` reads `.env` on start so the documented quickstart works with no manual export.
+    Existing process env wins (override=False); a missing python-dotenv degrades gracefully."""
+    from querygate import cli
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("QG_DOTENV_PROBE=from_file\nQG_DOTENV_WINS=file\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("QG_DOTENV_PROBE", raising=False)
+    monkeypatch.setenv("QG_DOTENV_WINS", "env")  # pre-set: the process env must win
+
+    cli._load_dotenv()
+
+    assert os.environ.get("QG_DOTENV_PROBE") == "from_file"  # loaded from .env
+    assert os.environ.get("QG_DOTENV_WINS") == "env"  # not overridden
+
+
+# ==================================================================================================
 # W-1 (live) — one real keyed run of the agent loop (gated on a model key; skips in keyless CI).
 # ==================================================================================================
 
