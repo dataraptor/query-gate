@@ -172,22 +172,30 @@ def test_c6_stdio_server_still_builds_the_four_tools():
 
 
 # ==================================================================================================
-# C-7 — --http fails cleanly pre-Split-10 (no traceback).
+# C-7 — --http now starts the Streamable-HTTP runner (Split 10 wired the seam).
 # ==================================================================================================
 
 
-def test_c7_http_fails_cleanly_pre_split10(capsys):
+def test_c7_http_routes_to_the_http_runner(monkeypatch):
+    # Split 10 filled the seam: bare `--http` dispatches to the HTTP runner (which blocks serving),
+    # so we monkeypatch it to capture the call instead of binding a port — same pattern as C-6.
+    called = {}
+
+    def fake_http(port):
+        called["port"] = port
+
+    monkeypatch.setattr(cli, "_serve_http", fake_http)
     rc = cli.main(["--http"])
-    assert rc != 0
-    err = capsys.readouterr().err
-    assert "Split 10" in err
-    assert "Traceback" not in err  # a clean message, not a stack trace
+    assert rc == 0
+    assert called.get("port") == 8000  # the default port
 
 
-def test_c7_http_with_port_fails_cleanly(capsys):
+def test_c7_http_port_is_forwarded_to_the_runner(monkeypatch):
+    called = {}
+    monkeypatch.setattr(cli, "_serve_http", lambda port: called.setdefault("port", port))
     rc = cli.main(["--http", "--port", "9001"])
-    assert rc != 0
-    assert "Split 10" in capsys.readouterr().err
+    assert rc == 0
+    assert called.get("port") == 9001
 
 
 # ==================================================================================================

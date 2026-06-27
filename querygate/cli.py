@@ -3,8 +3,8 @@
 One binary, four jobs:
 
 * ``querygate``                       — run the MCP server over **stdio** (the default; Split 06).
-* ``querygate --http [--port 8000]``  — run over Streamable HTTP (localhost). *Impl is Split 10*;
-  until then this flag fails **cleanly** ("arrives in Split 10"), never with a traceback.
+* ``querygate --http [--port 8000]``  — run the **same** server over Streamable HTTP, bound to
+  localhost (``http://localhost:8000/mcp``), the path the Messages API MCP connector uses (Split 10).
 * ``querygate seed [--reset]``        — (re)build the synthetic DB from the fixed seed (Split 01),
   connecting as the **admin** ``DATABASE_URL`` (seeding needs the privileged role).
 * ``querygate query "<SELECT ...>"``  — run one SELECT through the **full three-layer boundary** by
@@ -39,9 +39,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SEED_SCRIPT = REPO_ROOT / "scripts" / "seed.py"
 EVAL_SCRIPT = REPO_ROOT / "evals" / "run_eval.py"
 
-# Exit codes. 0 = ok. The headline refusal (a write blocked at the guard) and the unimplemented
-# surfaces (--http / eval) exit 2; a DB/config/runtime failure exits 3. Anything non-zero satisfies
-# the "visibly fails" contract; the split distinctions just make scripting precise.
+# Exit codes. 0 = ok. The headline refusal (a write blocked at the guard) and the not-yet-wired
+# eval seam exit 2; a DB/config/runtime failure exits 3. Anything non-zero satisfies the "visibly
+# fails" contract; the split distinctions just make scripting precise.
 EXIT_OK = 0
 EXIT_REJECTED = 2
 EXIT_UNIMPLEMENTED = 2
@@ -61,16 +61,16 @@ def _serve_stdio() -> None:
 
 
 def _serve_http(port: int) -> None:
-    """The Streamable-HTTP transport seam (spec §12). Filled in by Split 10.
+    """Run the MCP server over **Streamable HTTP**, bound to localhost (spec §12-B; Split 10).
 
-    Until then this raises a typed, legible :class:`NotImplementedError` that :func:`main` turns into
-    a clean message + non-zero exit (R4) — never a traceback. When Split 10 lands it replaces this
-    body with the FastMCP HTTP runner; the CLI dispatch above needs no change.
+    Delegates to :func:`querygate.server.serve_http`, which serves the *same* four-tool app at
+    ``http://localhost:<port>/mcp``. Localhost-only is the §2/§19 scope fence — bearer auth and a
+    non-loopback bind are the §21 roadmap, not v1. The boundary/audit guarantees are unchanged from
+    stdio (writes are still rejected; every call still writes exactly one audit line).
     """
-    raise NotImplementedError(
-        "the Streamable-HTTP transport arrives in Split 10 - for now run the default stdio server "
-        "(`querygate`) or use Claude Desktop's stdio config. (requested port: %d)" % port
-    )
+    from . import server
+
+    server.serve_http(host=server.HTTP_HOST, port=port)
 
 
 # ==================================================================================================
@@ -216,7 +216,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # Top-level transport selection: bare `querygate` = stdio; `--http` selects Streamable HTTP.
     parser.add_argument(
         "--http", action="store_true",
-        help="run the server over Streamable HTTP (localhost) instead of stdio [Split 10]",
+        help="run the server over Streamable HTTP (localhost) instead of stdio",
     )
     parser.add_argument(
         "--port", type=int, default=8000, help="port for --http (default: 8000)",
@@ -252,16 +252,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    # No subcommand → run the server. `--http` selects the transport (Split-10 seam).
+    # No subcommand → run the server. `--http` selects the Streamable-HTTP transport (Split 10);
+    # bare `querygate` runs over stdio (Split 06). Both block until the server is stopped.
     if args.command is None:
         if args.http:
-            try:
-                _serve_http(args.port)
-            except NotImplementedError as exc:
-                print(f"error: {exc}", file=sys.stderr)
-                return EXIT_UNIMPLEMENTED
-            return EXIT_OK
-        _serve_stdio()
+            _serve_http(args.port)
+        else:
+            _serve_stdio()
         return EXIT_OK
 
     return int(args.func(args))

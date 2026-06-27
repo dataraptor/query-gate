@@ -44,6 +44,14 @@ eval = [
     "openai>=1.55",
     "python-dotenv>=1.0",
 ]
+# The Streamable-HTTP MCP **connector** check (Split 10) drives the running `--http` server through
+# the Anthropic Messages API connector (`betas=["mcp-client-2025-11-20"]`). Optional + on-demand:
+# the keyless HTTP transport tests (H-1..H-4) need none of this; only the keyed H-5..H-7 do, and they
+# need an `ANTHROPIC_API_KEY` this repo does not ship (see PROGRESS.md). httpx ships with `mcp`.
+connector = [
+    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+]
 
 [project.scripts]
 # The CLI dispatch (spec §15): bare `querygate` = the stdio MCP server (default); `seed` / `query` /
